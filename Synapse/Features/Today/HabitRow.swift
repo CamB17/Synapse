@@ -13,6 +13,7 @@ struct HabitRow: View {
             } label: {
                 Image(systemName: isCompletedToday ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(isCompletedToday ? Theme.accent : Theme.textSecondary)
                     .symbolRenderingMode(.hierarchical)
             }
             .buttonStyle(.plain)
@@ -20,12 +21,12 @@ struct HabitRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Theme.text)
                     .lineLimit(1)
 
                 Text(streakText)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
             }
 

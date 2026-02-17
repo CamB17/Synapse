@@ -13,27 +13,57 @@ struct QuickCaptureSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                TextField(placeholder, text: $text, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(3, reservesSpace: true)
-                    .padding(.top, 8)
+            ScreenCanvas {
+                VStack(alignment: .leading, spacing: 14) {
+                    TextField(placeholder, text: $text, axis: .vertical)
+                        .font(.system(size: 17, weight: .medium, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(4, reservesSpace: true)
+                        .textInputAutocapitalization(.sentences)
+                        .padding(14)
+                        .background(
+                            Theme.surface,
+                            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                        )
+                        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+                        .padding(.top, 8)
 
-                if canAddToToday {
-                    Toggle("Add directly to Today", isOn: $addToToday)
-                        .toggleStyle(.switch)
+                    if canAddToToday {
+                        HStack(spacing: 12) {
+                            Text("Add directly to Today")
+                                .font(.system(size: 16, weight: .medium, design: .rounded))
+                                .foregroundStyle(Theme.text)
+
+                            Spacer(minLength: 8)
+
+                            Toggle("", isOn: $addToToday)
+                                .labelsHidden()
+                                .tint(Theme.accent)
+                        }
+                        .padding(14)
+                        .background(
+                            Theme.surface,
+                            in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                        )
+                        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+                    }
+
+                    Spacer(minLength: 0)
                 }
-
-                Spacer()
+                .padding(16)
             }
-            .padding(16)
             .navigationTitle("Capture")
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .tint(Theme.accent)
+                        .buttonStyle(.plain)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") { add() }
+                        .tint(Theme.accent)
+                        .buttonStyle(.plain)
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

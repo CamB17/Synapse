@@ -31,5 +31,8 @@ struct RootView: View {
                 .tabItem { Label("Review", systemImage: "chart.bar") }
                 .tag(Tab.review)
         }
+        .tint(Theme.accent)
+        .toolbarBackground(Theme.surface, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
     }
 }

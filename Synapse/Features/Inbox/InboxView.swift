@@ -22,47 +22,61 @@ struct InboxView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                captureRow
+            ScreenCanvas {
+                VStack(spacing: 12) {
+                    captureRow
 
-                List {
-                    Section(header: Text("INBOX (\(inbox.count))")) {
-                        ForEach(inbox) { item in
-                            HStack(spacing: 10) {
-                                Text(item.title)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                    List {
+                        Section {
+                            ForEach(inbox) { item in
+                                HStack(spacing: 10) {
+                                    Text(item.title)
+                                        .foregroundStyle(Theme.text)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                                Button {
-                                    commitToToday(item)
-                                } label: {
-                                    Label("Today", systemImage: "arrow.up.circle.fill")
-                                        .labelStyle(.titleAndIcon)
+                                    Button {
+                                        commitToToday(item)
+                                    } label: {
+                                        Label("Today", systemImage: "arrow.up.circle.fill")
+                                            .labelStyle(.titleAndIcon)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
                                 }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                            }
-                            .padding(14)
-                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .matchedGeometryEffect(id: item.id, in: taskNamespace)
-                            .opacity(committingTaskIDs.contains(item.id) ? 0.55 : 1)
-                            .scaleEffect(committingTaskIDs.contains(item.id) ? 0.96 : 1)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                            .listRowBackground(Color.clear)
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button("Today") { commitToToday(item) }
-                                    .tint(.blue)
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) { delete(item) } label: {
-                                    Text("Delete")
+                                .padding(14)
+                                .background(
+                                    Theme.surface,
+                                    in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                                )
+                                .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+                                .matchedGeometryEffect(id: item.id, in: taskNamespace)
+                                .opacity(committingTaskIDs.contains(item.id) ? 0.55 : 1)
+                                .scaleEffect(committingTaskIDs.contains(item.id) ? 0.96 : 1)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                                .listRowBackground(Color.clear)
+                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                    Button("Today") { commitToToday(item) }
+                                        .tint(Theme.accent)
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) { delete(item) } label: {
+                                        Text("Delete")
+                                    }
                                 }
                             }
+                        } header: {
+                            Text("INBOX (\(inbox.count))")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Theme.textSecondary)
+                                .tracking(0.8)
                         }
                     }
+                    .scrollContentBackground(.hidden)
+                    .listStyle(.insetGrouped)
                 }
-                .listStyle(.insetGrouped)
             }
             .navigationTitle("Inbox")
+            .toolbarColorScheme(.light, for: .navigationBar)
             .alert("Today is full", isPresented: $showCapAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -74,13 +88,22 @@ struct InboxView: View {
     private var captureRow: some View {
         HStack(spacing: 10) {
             TextField("Capture something…", text: $text)
-                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .foregroundStyle(Theme.text)
                 .submitLabel(.done)
                 .onSubmit(add)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    Theme.surface,
+                    in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                )
+                .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
 
             Button(action: add) {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
             }
             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }

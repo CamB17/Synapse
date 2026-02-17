@@ -52,44 +52,47 @@ struct TodayView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                mainContent
-                    .opacity(focusTask == nil ? 1 : 0.35)
-                    .blur(radius: focusTask == nil ? 0 : 6)
-                    .allowsHitTesting(focusTask == nil)
+            ScreenCanvas {
+                ZStack {
+                    mainContent
+                        .opacity(focusTask == nil ? 1 : 0.35)
+                        .blur(radius: focusTask == nil ? 0 : 6)
+                        .allowsHitTesting(focusTask == nil)
 
-                if let task = focusTask {
-                    FocusModeView(
-                        task: task,
-                        namespace: taskNamespace,
-                        heroId: task.id,
-                        onClose: { focusTask = nil },
-                        onSessionLogged: { minutes in
-                            showFocusLogToast(minutes: minutes)
-                        }
-                    )
-                        .zIndex(10)
-                }
-
-                if showingCaptureToast || showingFocusLogToast {
-                    VStack(spacing: 8) {
-                        if showingFocusLogToast {
-                            focusLogToast
-                                .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
-
-                        if showingCaptureToast {
-                            captureToast
-                                .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
+                    if let task = focusTask {
+                        FocusModeView(
+                            task: task,
+                            namespace: taskNamespace,
+                            heroId: task.id,
+                            onClose: { focusTask = nil },
+                            onSessionLogged: { minutes in
+                                showFocusLogToast(minutes: minutes)
+                            }
+                        )
+                            .zIndex(10)
                     }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 16)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .zIndex(15)
+
+                    if showingCaptureToast || showingFocusLogToast {
+                        VStack(spacing: 8) {
+                            if showingFocusLogToast {
+                                focusLogToast
+                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                            }
+
+                            if showingCaptureToast {
+                                captureToast
+                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                            }
+                        }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 16)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            .zIndex(15)
+                    }
                 }
             }
             .navigationTitle("Today")
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -97,6 +100,7 @@ struct TodayView: View {
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
                     }
                     .accessibilityLabel("Capture task")
                 }
@@ -132,7 +136,7 @@ struct TodayView: View {
             }
             .padding(16)
         }
-        .background(Color.secondary.opacity(isDayClear ? 0.03 : 0))
+        .background(Theme.canvas.opacity(isDayClear ? 0.35 : 0.0))
         .animation(.snappy(duration: 0.18), value: isDayClear)
     }
 
@@ -146,18 +150,18 @@ struct TodayView: View {
 
                 Text("/ \(headerDenominator) Cleared")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(formatMinutes(focusSecondsToday))")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .contentTransition(.numericText())
 
                 Text("focused today")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
             }
 
             Divider().padding(.top, 6)
@@ -176,11 +180,15 @@ struct TodayView: View {
 
             Text("Capture anything that comes up.")
                 .font(.system(size: 15))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            Theme.surface,
+            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        )
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
         .transition(.opacity)
     }
 
@@ -188,7 +196,7 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("REMAINING (\(remainingCount))")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
                 .tracking(0.8)
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.18), value: remainingCount)
@@ -219,14 +227,14 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("COMPLETED")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
                 .tracking(0.8)
 
             VStack(spacing: 8) {
                 if todayCompleted.isEmpty {
                     Text("Nothing completed yet today.")
                         .font(.system(size: 15))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                         .padding(.vertical, 6)
                 } else {
                     ForEach(todayCompleted) { task in
@@ -273,6 +281,7 @@ struct TodayView: View {
         HStack(spacing: 10) {
             Text("Added to Inbox")
                 .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.text)
 
             Spacer()
 
@@ -281,24 +290,28 @@ struct TodayView: View {
                     commitToToday(task)
                 }
                 .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.accent)
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+        .background(Theme.surface, in: Capsule(style: .continuous))
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
 
     private var focusLogToast: some View {
         HStack(spacing: 10) {
             Text(focusLogMessage)
                 .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.text)
 
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+        .background(Theme.surface, in: Capsule(style: .continuous))
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
 
     private func handleCapturedTask(_ task: TaskItem, addedToToday: Bool) {
@@ -388,14 +401,14 @@ private struct SwipeCompleteRow<Content: View>: View {
     var body: some View {
         ZStack(alignment: .trailing) {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.green.opacity(0.18))
+                .fill(Theme.success.opacity(0.18))
                 .overlay(alignment: .trailing) {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark")
                         Text("Complete")
                             .font(.system(size: 13, weight: .semibold))
                     }
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.success)
                     .padding(.trailing, 16)
                     .opacity(min(1, abs(activeOffset) / abs(revealOffset)))
                 }

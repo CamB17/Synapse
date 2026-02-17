@@ -30,18 +30,20 @@ struct TaskCard: View {
                 } label: {
                     Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(isCompleted ? Theme.accent : Theme.textSecondary)
                 }
                 .buttonStyle(.plain)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: prominent ? 17 : 16, weight: .semibold))
+                    .font(.system(size: prominent ? 17 : 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.text)
 
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
 
@@ -49,8 +51,11 @@ struct TaskCard: View {
         }
         .contentShape(Rectangle())
         .padding(14)
-        .background(.thinMaterial,
-                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            Theme.surface,
+            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        )
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
         .matchedGeometryEffect(id: id, in: namespace)
         .contextMenu {
             if let onComplete {

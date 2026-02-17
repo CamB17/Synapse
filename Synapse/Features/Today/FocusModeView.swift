@@ -43,7 +43,7 @@ struct FocusModeView: View {
             HStack {
                 Text("Focus")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
 
                 Spacer()
 
@@ -56,20 +56,24 @@ struct FocusModeView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                 }
                 .buttonStyle(.plain)
             }
 
             Text(task.title)
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Theme.text)
                 .multilineTextAlignment(.leading)
                 .lineLimit(3)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            Theme.surface2,
+            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        )
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
         .matchedGeometryEffect(id: heroId, in: namespace)
     }
 
@@ -81,7 +85,7 @@ struct FocusModeView: View {
 
             Text("Total on this task: \(formatMinutes(task.focusSeconds))")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
         }
         .padding(.top, 6)
     }
@@ -96,6 +100,7 @@ struct FocusModeView: View {
                     .padding(.vertical, 14)
             }
             .buttonStyle(.borderedProminent)
+            .tint(Theme.accent)
 
             Button {
                 endSession()

@@ -36,7 +36,7 @@ struct HabitBlock: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("HABITS")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .tracking(0.8)
 
                 Spacer()
@@ -46,7 +46,7 @@ struct HabitBlock: View {
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Manage habits")
@@ -56,11 +56,11 @@ struct HabitBlock: View {
                 HStack(spacing: 8) {
                     Image(systemName: "bell.badge")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
 
                     Text(reminderText)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
 
                     Spacer(minLength: 0)
@@ -70,11 +70,11 @@ struct HabitBlock: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.accent)
                     
                     Text("Habits complete today.")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                     
                     Spacer(minLength: 0)
                 }
@@ -84,7 +84,7 @@ struct HabitBlock: View {
             if activeHabits.isEmpty {
                 Text("Add a few daily anchors.")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .padding(.vertical, 4)
             } else {
                 VStack(spacing: 2) {
@@ -104,14 +104,18 @@ struct HabitBlock: View {
                     if activeHabits.count > 6 {
                         Text("+ \(activeHabits.count - 6) more")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textSecondary)
                             .padding(.top, 6)
                     }
                 }
             }
         }
         .padding(14)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            Theme.surface,
+            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        )
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
         .sheet(isPresented: $showingManage) {
             ManageHabitsView()
         }

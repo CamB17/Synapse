@@ -96,22 +96,25 @@ struct ReviewView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+            ScreenCanvas {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
 
-                    header
+                        header
 
-                    focusChartCard
+                        focusChartCard
 
-                    kpiGrid
+                        kpiGrid
 
-                    highlightsCard
+                        highlightsCard
 
-                    Spacer(minLength: 24)
+                        Spacer(minLength: 24)
+                    }
+                    .padding(16)
                 }
-                .padding(16)
             }
             .navigationTitle("Review")
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
     }
 
@@ -121,10 +124,11 @@ struct ReviewView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("This Week")
                 .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(Theme.text)
 
             Text(formattedWeekRange())
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
         }
         .padding(.top, 6)
     }
@@ -134,17 +138,18 @@ struct ReviewView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("Focus")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
 
                 Spacer()
 
                 Text(formatFocusFromSeconds(focusSecondsThisWeek))
                     .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.text)
                     .contentTransition(.numericText())
             }
 
             Chart(dailyFocus) { item in
-                let isBest = (bestDay != nil && bestDay!.minutes > 0 && isSameDay(bestDay!.date, item.date))
+                let isBest = bestDay.map { $0.minutes > 0 && isSameDay($0.date, item.date) } ?? false
 
                 BarMark(
                     x: .value("Day", shortWeekday(item.date)),
@@ -152,6 +157,7 @@ struct ReviewView: View {
                 )
                 .cornerRadius(4)
                 .opacity(isBest ? 1.0 : (item.minutes == 0 ? 0.18 : 0.55))
+                .foregroundStyle(isBest ? Theme.accent2 : Theme.accent)
 
                 if isBest {
                     PointMark(
@@ -160,6 +166,7 @@ struct ReviewView: View {
                     )
                     .symbolSize(30)
                     .opacity(0.9)
+                    .foregroundStyle(Theme.accent2)
                 }
             }
             .chartYScale(domain: 0...(max(dailyFocus.map(\.minutes).max() ?? 0, 10)))
@@ -167,7 +174,7 @@ struct ReviewView: View {
             .chartXAxis {
                 AxisMarks(values: dailyFocus.map { shortWeekday($0.date) }) { _ in
                     AxisValueLabel()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
             .frame(height: 140)
@@ -175,12 +182,16 @@ struct ReviewView: View {
             if let bestDay {
                 Text("Peak: \(weekday(bestDay.date))")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .padding(.top, 4)
             }
         }
         .padding(14)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            Theme.surface,
+            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        )
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
 
     private var kpiGrid: some View {
@@ -200,34 +211,44 @@ struct ReviewView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
                 .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(Theme.text)
                 .contentTransition(.numericText())
 
             Text(label)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            Theme.surface,
+            in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+        )
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
 
     private var highlightsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Highlights")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
 
             if let bestDay {
                 Text("Best day: \(weekday(bestDay.date)) — \(formatMinutes(bestDay.minutes))")
                     .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.text)
             } else {
                 Text("No focus logged yet this week.")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
             }
         }
         .padding(14)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            Theme.surface,
+            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        )
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
 
     // MARK: - Formatting
