@@ -27,6 +27,7 @@ struct TodayView: View {
     @State private var showingFocusLogToast = false
     @State private var focusLogDismissWorkItem: DispatchWorkItem?
     @State private var pulsing = false
+    @State private var showingCompletedReview = false
 
     private var todayCap: Int { 5 }
     private var remainingCount: Int { todayTasks.count }
@@ -56,13 +57,28 @@ struct TodayView: View {
     }
     
     private var headerMicroLine: String {
-        if isDayClear {
+        if completedTodayCount >= todayCap {
             return "Strong finish."
         }
-        if completedTodayCount > 0 {
-            return "Good momentum today."
+        if completedTodayCount >= 3 { return "On track." }
+        if completedTodayCount >= 1 { return "Momentum building." }
+        return "Start small."
+    }
+    
+    private var dailyInsightLine: String {
+        if completedTodayCount >= todayCap {
+            return "Clean execution today."
         }
-        return "Start with one small win."
+        if focusSecondsToday >= 60 * 60 {
+            return "You protected your focus."
+        }
+        if completedTodayCount >= 3 {
+            return "Consistency compounds."
+        }
+        if completedTodayCount > 0 {
+            return "Small wins stack."
+        }
+        return "Start small, stay steady."
     }
 
     var body: some View {
@@ -130,6 +146,9 @@ struct TodayView: View {
                 }
             )
         }
+        .sheet(isPresented: $showingCompletedReview) {
+            CompletedTodaySheet(tasks: todayCompleted)
+        }
         .animation(.snappy(duration: 0.22), value: focusTask)
         .animation(.snappy(duration: 0.18), value: showingCaptureToast)
         .animation(.snappy(duration: 0.18), value: showingFocusLogToast)
@@ -137,7 +156,7 @@ struct TodayView: View {
 
     private var mainContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 header
                 HabitBlock()
 
@@ -146,8 +165,9 @@ struct TodayView: View {
                 } else {
                     remainingSection
                 }
-
-                completedSection
+                
+                performanceTile
+                dailyInsightTile
             }
             .padding(16)
         }
@@ -157,16 +177,32 @@ struct TodayView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Completion: show completed vs cap (or vs planned if you prefer)
             HStack(alignment: .firstTextBaseline) {
                 Text("\(completedTodayCount)")
                     .font(.system(size: 40, weight: .semibold, design: .rounded))
                     .contentTransition(.numericText())
 
-                Text("/ \(headerDenominator) Cleared")
+                Text("/ \(headerDenominator)")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(Theme.textSecondary)
             }
+            
+            Text(headerMicroLine.uppercased())
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .tracking(0.7)
+                .foregroundStyle(Theme.accent.opacity(0.9))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Theme.accent.opacity(0.1))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(Theme.accent.opacity(0.16), lineWidth: 0.5)
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .animation(.snappy(duration: 0.2), value: headerMicroLine)
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(formatMinutes(focusSecondsToday))")
@@ -174,7 +210,7 @@ struct TodayView: View {
                     .foregroundStyle(Theme.textSecondary)
                     .contentTransition(.numericText())
 
-                Text("focused today")
+                Text("focused")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -191,12 +227,6 @@ struct TodayView: View {
                 }
                 .clipShape(Capsule())
                 .animation(.snappy(duration: 0.22), value: headerProgress)
-            
-            Text(headerMicroLine)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(Theme.textSecondary)
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                .animation(.snappy(duration: 0.2), value: headerMicroLine)
 
             Divider().padding(.top, 6)
         }
@@ -237,22 +267,22 @@ struct TodayView: View {
     }
 
     private var remainingSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "circle.dashed")
                     .font(.system(size: 12, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Theme.accent.opacity(0.45))
 
-                Text("REMAINING (\(remainingCount))")
+                Text("Commitments (\(remainingCount))")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.textSecondary)
-                    .tracking(0.8)
+                    .tracking(0.3)
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.18), value: remainingCount)
             }
 
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 ForEach(todayTasks) { task in
                     SwipeCompleteRow(
                         onComplete: { complete(task) },
@@ -274,46 +304,55 @@ struct TodayView: View {
         }
     }
 
-    private var completedSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.seal")
-                    .font(.system(size: 12, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Theme.accent.opacity(0.45))
-
-                Text("COMPLETED")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.textSecondary)
-                    .tracking(0.8)
-            }
-
-            VStack(spacing: 8) {
-                if todayCompleted.isEmpty {
-                    Text("Nothing completed yet today.")
-                        .font(.system(size: 15))
+    private var performanceTile: some View {
+        Button {
+            showingCompletedReview = true
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Completed Today")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.textSecondary)
-                        .padding(.vertical, 6)
-                } else {
-                    ForEach(todayCompleted) { task in
-                        TaskCard(
-                            id: task.id,
-                            namespace: taskNamespace,
-                            title: task.title,
-                            subtitle: "Done",
-                            prominent: false,
-                            isCompleted: true,
-                            onTap: nil,
-                            onComplete: nil
-                        )
-                        .opacity(0.85)
-                        .transition(.scale(scale: 0.96).combined(with: .opacity))
-                        .animation(.snappy(duration: 0.18), value: todayCompleted.count)
-                    }
+                        .tracking(0.6)
+
+                    Text("\(completedTodayCount) \(completedTodayCount == 1 ? "action" : "actions")")
+                        .font(.system(size: 19, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                        .contentTransition(.numericText())
+
+                    Text("Tap to review")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.textSecondary)
                 }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary.opacity(0.8))
             }
+            .padding(14)
+            .background(
+                Theme.surface,
+                in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+            )
+            .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
         }
-        .padding(.top, 6)
+        .buttonStyle(.plain)
+    }
+    
+    private var dailyInsightTile: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.accent.opacity(0.5))
+            Text(dailyInsightLine)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(Theme.textSecondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 2)
+        .padding(.top, 2)
     }
 
     private func complete(_ task: TaskItem) {
@@ -434,6 +473,72 @@ struct TodayView: View {
                 pulsing = false
             }
         }
+    }
+}
+
+private struct CompletedTodaySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let tasks: [TaskItem]
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if tasks.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Nothing completed yet today.")
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.text)
+                        Text("Complete one commitment to start momentum.")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(Theme.textSecondary)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(16)
+                } else {
+                    List {
+                        ForEach(tasks) { task in
+                            HStack(spacing: 10) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(Theme.accent)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(task.title)
+                                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(Theme.text)
+                                    if let completedAt = task.completedAt {
+                                        Text(timeFormatter.string(from: completedAt))
+                                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                                            .foregroundStyle(Theme.textSecondary)
+                                    }
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.vertical, 2)
+                            .listRowBackground(Theme.surface)
+                        }
+                    }
+                    .scrollContentBackground(.hidden)
+                    .listStyle(.insetGrouped)
+                }
+            }
+            .background(Theme.canvas)
+            .navigationTitle("Completed Today")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .tint(Theme.accent)
+                }
+            }
+        }
+        .toolbarColorScheme(.light, for: .navigationBar)
+    }
+
+    private var timeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
     }
 }
 

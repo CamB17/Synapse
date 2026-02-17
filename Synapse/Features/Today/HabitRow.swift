@@ -42,6 +42,6 @@ struct HabitRow: View {
 
             Spacer()
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
     }
 }

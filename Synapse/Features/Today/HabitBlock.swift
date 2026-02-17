@@ -33,7 +33,7 @@ struct HabitBlock: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 HStack(spacing: 8) {
                     Image(systemName: "leaf")
@@ -41,10 +41,10 @@ struct HabitBlock: View {
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(Theme.accent.opacity(0.45))
 
-                    Text("HABITS")
+                    Text("Daily Rituals")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.textSecondary)
-                        .tracking(0.8)
+                        .tracking(0.3)
                 }
 
                 Spacer()
@@ -95,8 +95,8 @@ struct HabitBlock: View {
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.vertical, 4)
             } else {
-                VStack(spacing: 2) {
-                    ForEach(activeHabits.prefix(6)) { habit in
+                VStack(spacing: 1) {
+                    ForEach(activeHabits.prefix(3)) { habit in
                         HabitRow(
                             title: habit.title,
                             streakText: streakText(for: habit),
@@ -110,8 +110,8 @@ struct HabitBlock: View {
                         .animation(.snappy(duration: 0.16), value: pulseId)
                     }
 
-                    if activeHabits.count > 6 {
-                        Text("+ \(activeHabits.count - 6) more")
+                    if activeHabits.count > 3 {
+                        Text("+ \(activeHabits.count - 3) more")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(Theme.textSecondary)
                             .padding(.top, 6)
@@ -119,12 +119,12 @@ struct HabitBlock: View {
                 }
             }
         }
-        .padding(14)
+        .padding(12)
         .background(
-            Theme.surface,
+            Theme.surface2.opacity(0.82),
             in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
         )
-        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+        .shadow(color: Theme.cardShadow().opacity(0.45), radius: 6, y: 3)
         .sheet(isPresented: $showingManage) {
             ManageHabitsView()
         }
