@@ -105,7 +105,7 @@ struct InboxView: View {
         haptic.impactOccurred()
 
         withAnimation(.snappy(duration: 0.18)) {
-            committingTaskIDs.insert(item.id)
+            _ = committingTaskIDs.insert(item.id)
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
