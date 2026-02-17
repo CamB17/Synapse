@@ -2,6 +2,9 @@ import SwiftUI
 import SwiftData
 
 struct InboxView: View {
+    let taskNamespace: Namespace.ID
+    let onCommitToToday: (() -> Void)?
+
     @Environment(\.modelContext) private var modelContext
 
     @Query(filter: #Predicate<TaskItem> { $0.stateRaw == "inbox" },
@@ -13,6 +16,7 @@ struct InboxView: View {
 
     @State private var text: String = ""
     @State private var showCapAlert = false
+    @State private var committingTaskIDs: Set<UUID> = []
 
     private let todayCap = 5
 
@@ -37,15 +41,22 @@ struct InboxView: View {
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
                             }
-                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                    Button("Today") { commitToToday(item) }
-                                        .tint(.blue)
+                            .padding(14)
+                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .matchedGeometryEffect(id: item.id, in: taskNamespace)
+                            .opacity(committingTaskIDs.contains(item.id) ? 0.55 : 1)
+                            .scaleEffect(committingTaskIDs.contains(item.id) ? 0.96 : 1)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button("Today") { commitToToday(item) }
+                                    .tint(.blue)
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) { delete(item) } label: {
+                                    Text("Delete")
                                 }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) { delete(item) } label: {
-                                        Text("Delete")
-                                    }
-                                }
+                            }
                         }
                     }
                 }
@@ -93,10 +104,18 @@ struct InboxView: View {
         let haptic = UIImpactFeedbackGenerator(style: .soft)
         haptic.impactOccurred()
 
-        withAnimation(.snappy(duration: 0.22)) {
-            item.state = .today
+        withAnimation(.snappy(duration: 0.18)) {
+            committingTaskIDs.insert(item.id)
         }
-        try? modelContext.save()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+            withAnimation(.snappy(duration: 0.22)) {
+                item.state = .today
+                onCommitToToday?()
+            }
+            try? modelContext.save()
+            committingTaskIDs.remove(item.id)
+        }
     }
 
     private func delete(_ item: TaskItem) {

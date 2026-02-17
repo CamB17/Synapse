@@ -3,7 +3,7 @@ import SwiftData
 
 
 struct TodayView: View {
-    @Namespace private var taskNamespace
+    let taskNamespace: Namespace.ID
 
     @Environment(\.modelContext) private var modelContext
 
@@ -23,9 +23,12 @@ struct TodayView: View {
     @State private var toastTask: TaskItem?
     @State private var showingCaptureToast = false
     @State private var toastDismissWorkItem: DispatchWorkItem?
+    @State private var focusLogMessage = ""
+    @State private var showingFocusLogToast = false
+    @State private var focusLogDismissWorkItem: DispatchWorkItem?
+    @State private var pulsing = false
 
     private var todayCap: Int { 5 }
-    private var plannedCount: Int { min(todayTasks.count + remainingSlack, todayCap) } // for header clarity
     private var remainingCount: Int { todayTasks.count }
     private var isDayClear: Bool { todayTasks.isEmpty }
     private var completedTodayCount: Int {
@@ -47,31 +50,42 @@ struct TodayView: View {
             .reduce(0) { $0 + $1.durationSeconds }
     }
 
-    // This keeps header stable even if user has fewer than 5 tasks.
-    private var remainingSlack: Int {
-        max(0, todayCap - todayTasks.count)
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
                 mainContent
+                    .opacity(focusTask == nil ? 1 : 0.35)
+                    .blur(radius: focusTask == nil ? 0 : 6)
+                    .allowsHitTesting(focusTask == nil)
 
                 if let task = focusTask {
-                    FocusModeView(task: task, onClose: { focusTask = nil })
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.95).combined(with: .opacity),
-                            removal: .opacity
-                        ))
+                    FocusModeView(
+                        task: task,
+                        namespace: taskNamespace,
+                        heroId: task.id,
+                        onClose: { focusTask = nil },
+                        onSessionLogged: { minutes in
+                            showFocusLogToast(minutes: minutes)
+                        }
+                    )
                         .zIndex(10)
                 }
 
-                if showingCaptureToast {
-                    captureToast
+                if showingCaptureToast || showingFocusLogToast {
+                    VStack(spacing: 8) {
+                        if showingFocusLogToast {
+                            focusLogToast
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+
+                        if showingCaptureToast {
+                            captureToast
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                         .zIndex(15)
                 }
             }
@@ -99,6 +113,7 @@ struct TodayView: View {
         }
         .animation(.snappy(duration: 0.22), value: focusTask)
         .animation(.snappy(duration: 0.18), value: showingCaptureToast)
+        .animation(.snappy(duration: 0.18), value: showingFocusLogToast)
     }
 
     private var mainContent: some View {
@@ -116,6 +131,8 @@ struct TodayView: View {
             }
             .padding(16)
         }
+        .background(Color.secondary.opacity(isDayClear ? 0.03 : 0))
+        .animation(.snappy(duration: 0.18), value: isDayClear)
     }
 
     private var header: some View {
@@ -130,23 +147,33 @@ struct TodayView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
-            .animation(.snappy(duration: 0.18), value: completedTodayCount)
 
-            Text("\(formatMinutes(focusSecondsToday)) focused today")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.secondary)
-                .contentTransition(.numericText())
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(formatMinutes(focusSecondsToday))")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+
+                Text("focused today")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
 
             Divider().padding(.top, 6)
         }
+        .scaleEffect(pulsing ? 1.01 : 1.0)
+        .animation(.snappy(duration: 0.18), value: pulsing)
+        .animation(.snappy(duration: 0.18), value: todayTasks.count)
+        .animation(.snappy(duration: 0.18), value: completedTodayCount)
+        .animation(.snappy(duration: 0.18), value: focusSecondsToday)
     }
 
     private var dayClearState: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Day complete.")
+            Text("Board clear.")
                 .font(.system(size: 18, weight: .semibold))
 
-            Text("Your board is clear. Capture anything new as it comes up.")
+            Text("Capture anything that comes up.")
                 .font(.system(size: 15))
                 .foregroundStyle(.secondary)
         }
@@ -159,9 +186,11 @@ struct TodayView: View {
     private var remainingSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("REMAINING (\(remainingCount))")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .tracking(0.8)
                 .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.18), value: remainingCount)
 
             VStack(spacing: 10) {
                 ForEach(todayTasks) { task in
@@ -186,12 +215,13 @@ struct TodayView: View {
     }
 
     private var completedSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("COMPLETED")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
+                .tracking(0.8)
 
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 if todayCompleted.isEmpty {
                     Text("Nothing completed yet today.")
                         .font(.system(size: 15))
@@ -227,6 +257,7 @@ struct TodayView: View {
             task.completedAt = .now
         }
         try? modelContext.save()
+        pulseHeader()
     }
 
     private func formatMinutes(_ seconds: Int) -> String {
@@ -251,6 +282,18 @@ struct TodayView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .buttonStyle(.plain)
             }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+    }
+
+    private var focusLogToast: some View {
+        HStack(spacing: 10) {
+            Text(focusLogMessage)
+                .font(.system(size: 14, weight: .semibold))
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -289,6 +332,36 @@ struct TodayView: View {
         toastDismissWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.4, execute: workItem)
     }
+
+    private func showFocusLogToast(minutes: Int) {
+        focusLogDismissWorkItem?.cancel()
+        focusLogMessage = "Logged \(minutes) min"
+        pulseHeader()
+
+        withAnimation(.snappy(duration: 0.18)) {
+            showingFocusLogToast = true
+        }
+
+        let workItem = DispatchWorkItem {
+            withAnimation(.snappy(duration: 0.18)) {
+                showingFocusLogToast = false
+            }
+        }
+        focusLogDismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: workItem)
+    }
+
+    private func pulseHeader() {
+        withAnimation(.snappy(duration: 0.2)) {
+            pulsing = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.snappy(duration: 0.18)) {
+                pulsing = false
+            }
+        }
+    }
 }
 
 private struct SwipeCompleteRow<Content: View>: View {
@@ -298,14 +371,14 @@ private struct SwipeCompleteRow<Content: View>: View {
 
     @State private var settledOffset: CGFloat = 0
     @GestureState private var dragOffset: CGFloat = 0
+    @GestureState private var isDraggingHorizontally = false
     @State private var isCompleting = false
-    @State private var isSwipeActive = false
+    @State private var suppressTapUntil = Date.distantPast
 
     private let revealThreshold: CGFloat = -48
     private let revealOffset: CGFloat = -76
     private let triggerThreshold: CGFloat = -124
     private let maxSwipe: CGFloat = -170
-    private let leadingControlWidth: CGFloat = 56
 
     private var activeOffset: CGFloat {
         clampedOffset(settledOffset + dragOffset)
@@ -328,37 +401,29 @@ private struct SwipeCompleteRow<Content: View>: View {
 
             content()
                 .offset(x: activeOffset)
-                .allowsHitTesting(!isSwipeActive && !isCompleting && settledOffset == 0)
+                .allowsHitTesting(!isDraggingHorizontally && !isCompleting && settledOffset == 0)
         }
         .contentShape(Rectangle())
-        .gesture(
-            SpatialTapGesture()
-                .onEnded { value in
-                    guard !isSwipeActive, !isCompleting else { return }
+        .onTapGesture {
+            guard !isDraggingHorizontally, !isCompleting else { return }
+            guard Date() >= suppressTapUntil else { return }
 
-                    // Ignore taps on the leading completion control area.
-                    guard value.location.x > leadingControlWidth else { return }
-
-                    if settledOffset != 0 {
-                        withAnimation(.snappy(duration: 0.18)) {
-                            settledOffset = 0
-                        }
-                        return
-                    }
-                    onTap?()
+            if settledOffset != 0 {
+                withAnimation(.snappy(duration: 0.18)) {
+                    settledOffset = 0
                 }
-        )
+                return
+            }
+            onTap?()
+        }
         .simultaneousGesture(dragGesture)
         .animation(.snappy(duration: 0.18), value: settledOffset)
     }
 
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 12, coordinateSpace: .local)
-            .onChanged { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                if !isSwipeActive {
-                    isSwipeActive = true
-                }
+            .updating($isDraggingHorizontally) { value, state, _ in
+                state = abs(value.translation.width) > abs(value.translation.height)
             }
             .updating($dragOffset) { value, state, _ in
                 guard abs(value.translation.width) > abs(value.translation.height) else {
@@ -371,6 +436,7 @@ private struct SwipeCompleteRow<Content: View>: View {
             .onEnded { value in
                 guard !isCompleting else { return }
                 guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                suppressTapUntil = .now.addingTimeInterval(0.18)
 
                 let finalOffset = clampedOffset(settledOffset + value.translation.width)
                 if finalOffset <= triggerThreshold {
@@ -379,10 +445,6 @@ private struct SwipeCompleteRow<Content: View>: View {
                     settledOffset = revealOffset
                 } else {
                     settledOffset = 0
-                }
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    isSwipeActive = false
                 }
             }
     }

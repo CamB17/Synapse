@@ -10,7 +10,19 @@ struct TaskCard: View {
     let onTap: (() -> Void)?
     let onComplete: (() -> Void)?
 
+    @ViewBuilder
     var body: some View {
+        if let onTap {
+            cardContent
+                .onTapGesture {
+                    onTap()
+                }
+        } else {
+            cardContent
+        }
+    }
+
+    private var cardContent: some View {
         HStack(spacing: 12) {
             if let onComplete {
                 Button {
@@ -36,9 +48,6 @@ struct TaskCard: View {
             Spacer()
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            onTap?()
-        }
         .padding(14)
         .background(.thinMaterial,
                     in: RoundedRectangle(cornerRadius: 16, style: .continuous))

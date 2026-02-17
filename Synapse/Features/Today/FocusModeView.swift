@@ -2,33 +2,57 @@ import SwiftUI
 import SwiftData
 
 struct FocusModeView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
     @Bindable var task: TaskItem
-    let onClose: (() -> Void)?
+
+    let namespace: Namespace.ID
+    let heroId: UUID
+    let onClose: () -> Void
+    let onSessionLogged: ((Int) -> Void)?
 
     @State private var isRunning = false
     @State private var elapsedSeconds: Int = 0
-    @State private var startDate: Date?
     @State private var timer: Timer?
 
-    init(task: TaskItem, onClose: (() -> Void)? = nil) {
-        self.task = task
-        self.onClose = onClose
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.black.opacity(0.35))
+                .ignoresSafeArea()
+                .transition(.opacity)
+
+            VStack(spacing: 14) {
+                heroCard
+
+                timerBlock
+
+                controls
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
+        }
+        .onDisappear { timer?.invalidate() }
     }
 
-    var body: some View {
-        VStack(spacing: 18) {
+    private var heroCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Capsule()
-                    .fill(.secondary.opacity(0.3))
-                    .frame(width: 44, height: 5)
+                Text("Focus")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
 
                 Spacer()
 
                 Button {
-                    close()
+                    let haptic = UIImpactFeedbackGenerator(style: .soft)
+                    haptic.impactOccurred()
+                    withAnimation(.snappy(duration: 0.18)) {
+                        onClose()
+                    }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 22, weight: .semibold))
@@ -36,60 +60,54 @@ struct FocusModeView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.top, 10)
-            .padding(.horizontal, 16)
 
-            VStack(spacing: 8) {
-                Text(task.title)
-                    .font(.system(size: 20, weight: .semibold))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 18)
+            Text(task.title)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.leading)
+                .lineLimit(3)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .matchedGeometryEffect(id: heroId, in: namespace)
+    }
 
-                Text("Focus mode")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.top, 8)
-
+    private var timerBlock: some View {
+        VStack(spacing: 6) {
             Text(timeString(elapsedSeconds))
                 .font(.system(size: 52, weight: .semibold, design: .rounded))
                 .contentTransition(.numericText())
-                .padding(.top, 6)
 
-            HStack(spacing: 12) {
-                Button {
-                    if isRunning { pause() } else { start() }
-                } label: {
-                    Text(isRunning ? "Pause" : "Start")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button {
-                    endSession()
-                } label: {
-                    Text("End")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                }
-                .buttonStyle(.bordered)
-                .disabled(elapsedSeconds == 0)
-            }
-            .padding(.horizontal, 18)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Total on this task: \(formatMinutes(task.focusSeconds))")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.top, 8)
-
-            Spacer()
+            Text("Total on this task: \(formatMinutes(task.focusSeconds))")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
         }
-        .presentationDetents([.medium, .large])
-        .onDisappear { timer?.invalidate() }
-        .background(.regularMaterial)
+        .padding(.top, 6)
+    }
+
+    private var controls: some View {
+        HStack(spacing: 12) {
+            Button {
+                if isRunning { pause() } else { start() }
+            } label: {
+                Text(isRunning ? "Pause" : "Start")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button {
+                endSession()
+            } label: {
+                Text("End")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(.bordered)
+            .disabled(elapsedSeconds == 0)
+        }
+        .padding(.top, 6)
     }
 
     private func start() {
@@ -97,8 +115,6 @@ struct FocusModeView: View {
         haptic.impactOccurred()
 
         isRunning = true
-        startDate = .now
-
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             elapsedSeconds += 1
@@ -112,42 +128,29 @@ struct FocusModeView: View {
         isRunning = false
         timer?.invalidate()
         timer = nil
-        startDate = nil
     }
 
     private func endSession() {
         let haptic = UIImpactFeedbackGenerator(style: .medium)
         haptic.impactOccurred()
 
-        // Stop timer
         isRunning = false
         timer?.invalidate()
         timer = nil
 
-        // Persist session
         let session = FocusSession(taskId: task.id, startedAt: .now)
         session.endedAt = .now
         session.durationSeconds = elapsedSeconds
 
         modelContext.insert(session)
 
-        // Accumulate on task
         task.focusSeconds += elapsedSeconds
 
         try? modelContext.save()
-        close()
-    }
+        onSessionLogged?(max(1, elapsedSeconds / 60))
 
-    private func close() {
-        isRunning = false
-        timer?.invalidate()
-        timer = nil
-        startDate = nil
-
-        if let onClose {
+        withAnimation(.snappy(duration: 0.18)) {
             onClose()
-        } else {
-            dismiss()
         }
     }
 
