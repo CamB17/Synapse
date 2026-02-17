@@ -49,6 +49,21 @@ struct TodayView: View {
             .filter { $0.startedAt >= start }
             .reduce(0) { $0 + $1.durationSeconds }
     }
+    
+    private var headerProgress: CGFloat {
+        guard headerDenominator > 0 else { return 0 }
+        return min(1, CGFloat(completedTodayCount) / CGFloat(headerDenominator))
+    }
+    
+    private var headerMicroLine: String {
+        if isDayClear {
+            return "Strong finish."
+        }
+        if completedTodayCount > 0 {
+            return "Good momentum today."
+        }
+        return "Start with one small win."
+    }
 
     var body: some View {
         NavigationStack {
@@ -141,7 +156,7 @@ struct TodayView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             // Completion: show completed vs cap (or vs planned if you prefer)
             HStack(alignment: .firstTextBaseline) {
                 Text("\(completedTodayCount)")
@@ -163,6 +178,25 @@ struct TodayView: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Theme.textSecondary)
             }
+            
+            Capsule()
+                .fill(Theme.accent.opacity(0.12))
+                .frame(height: 7)
+                .overlay(alignment: .leading) {
+                    GeometryReader { proxy in
+                        Capsule()
+                            .fill(Theme.accent)
+                            .frame(width: max(8, proxy.size.width * headerProgress), height: 7)
+                    }
+                }
+                .clipShape(Capsule())
+                .animation(.snappy(duration: 0.22), value: headerProgress)
+            
+            Text(headerMicroLine)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(Theme.textSecondary)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .animation(.snappy(duration: 0.2), value: headerMicroLine)
 
             Divider().padding(.top, 6)
         }
@@ -174,13 +208,23 @@ struct TodayView: View {
     }
 
     private var dayClearState: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Board clear.")
-                .font(.system(size: 18, weight: .semibold))
+        HStack(alignment: .top, spacing: 12) {
+            ZStack(alignment: .topTrailing) {
+                Illustration(symbol: "checkmark.circle", style: .playful, size: 34)
+                SparkleOverlay()
+            }
 
-            Text("Capture anything that comes up.")
-                .font(.system(size: 15))
-                .foregroundStyle(Theme.textSecondary)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Board clear.")
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.text)
+
+                Text("Capture anything that comes up.")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+
+            Spacer()
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,12 +238,19 @@ struct TodayView: View {
 
     private var remainingSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("REMAINING (\(remainingCount))")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Theme.textSecondary)
-                .tracking(0.8)
-                .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.18), value: remainingCount)
+            HStack(spacing: 8) {
+                Image(systemName: "circle.dashed")
+                    .font(.system(size: 12, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Theme.accent.opacity(0.45))
+
+                Text("REMAINING (\(remainingCount))")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .tracking(0.8)
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.18), value: remainingCount)
+            }
 
             VStack(spacing: 10) {
                 ForEach(todayTasks) { task in
@@ -225,10 +276,17 @@ struct TodayView: View {
 
     private var completedSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("COMPLETED")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Theme.textSecondary)
-                .tracking(0.8)
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal")
+                    .font(.system(size: 12, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Theme.accent.opacity(0.45))
+
+                Text("COMPLETED")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .tracking(0.8)
+            }
 
             VStack(spacing: 8) {
                 if todayCompleted.isEmpty {
@@ -249,6 +307,7 @@ struct TodayView: View {
                             onComplete: nil
                         )
                         .opacity(0.85)
+                        .transition(.scale(scale: 0.96).combined(with: .opacity))
                         .animation(.snappy(duration: 0.18), value: todayCompleted.count)
                     }
                 }

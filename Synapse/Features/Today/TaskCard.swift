@@ -9,6 +9,7 @@ struct TaskCard: View {
     let isCompleted: Bool
     let onTap: (() -> Void)?
     let onComplete: (() -> Void)?
+    @State private var completedAppear = false
 
     @ViewBuilder
     var body: some View {
@@ -52,11 +53,26 @@ struct TaskCard: View {
         .contentShape(Rectangle())
         .padding(14)
         .background(
-            Theme.surface,
+            isCompleted ? Theme.accent.opacity(0.06) : Theme.surface,
             in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
         )
         .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+        .scaleEffect(isCompleted ? (completedAppear ? 1 : 0.985) : 1)
+        .animation(.snappy(duration: 0.18), value: completedAppear)
         .matchedGeometryEffect(id: id, in: namespace)
+        .onAppear {
+            guard isCompleted else { return }
+            withAnimation(.snappy(duration: 0.18)) {
+                completedAppear = true
+            }
+        }
+        .onChange(of: isCompleted) { oldValue, newValue in
+            guard !oldValue, newValue else { return }
+            completedAppear = false
+            withAnimation(.snappy(duration: 0.18)) {
+                completedAppear = true
+            }
+        }
         .contextMenu {
             if let onComplete {
                 Button("Complete", systemImage: "checkmark") { onComplete() }

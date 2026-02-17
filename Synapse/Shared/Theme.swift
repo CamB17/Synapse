@@ -32,6 +32,16 @@ enum Theme {
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
+    
+    static let topDepthGradient = LinearGradient(
+        colors: [
+            Color(red: 0.93, green: 0.90, blue: 1.00).opacity(0.55),
+            Color(red: 0.98, green: 0.94, blue: 0.91).opacity(0.42),
+            .clear
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
 
     // MARK: - Layout Tokens
     static let radius: CGFloat = 18

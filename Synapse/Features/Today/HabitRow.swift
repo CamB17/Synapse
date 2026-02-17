@@ -4,6 +4,7 @@ struct HabitRow: View {
     let title: String
     let streakText: String
     let isCompletedToday: Bool
+    let showSparkle: Bool
     let onToggle: () -> Void
 
     var body: some View {
@@ -11,10 +12,19 @@ struct HabitRow: View {
             Button {
                 onToggle()
             } label: {
-                Image(systemName: isCompletedToday ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(isCompletedToday ? Theme.accent : Theme.textSecondary)
-                    .symbolRenderingMode(.hierarchical)
+                ZStack {
+                    Image(systemName: isCompletedToday ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(isCompletedToday ? Theme.accent : Theme.textSecondary)
+                        .symbolRenderingMode(.hierarchical)
+
+                    if showSparkle {
+                        SparkleOverlay()
+                    }
+                }
+                .scaleEffect(showSparkle ? 1.12 : 1)
+                .animation(.spring(response: 0.22, dampingFraction: 0.65), value: showSparkle)
+                .animation(.snappy(duration: 0.16), value: isCompletedToday)
             }
             .buttonStyle(.plain)
 

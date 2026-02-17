@@ -9,6 +9,7 @@ struct HabitBlock: View {
 
     @State private var showingManage = false
     @State private var pulseId: UUID?
+    @State private var sparkleId: UUID?
 
     private var activeHabits: [Habit] {
         habits.filter(\.isActive)
@@ -34,10 +35,17 @@ struct HabitBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("HABITS")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.textSecondary)
-                    .tracking(0.8)
+                HStack(spacing: 8) {
+                    Image(systemName: "leaf")
+                        .font(.system(size: 12, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(Theme.accent.opacity(0.45))
+
+                    Text("HABITS")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .tracking(0.8)
+                }
 
                 Spacer()
 
@@ -92,7 +100,8 @@ struct HabitBlock: View {
                         HabitRow(
                             title: habit.title,
                             streakText: streakText(for: habit),
-                            isCompletedToday: habit.completedToday
+                            isCompletedToday: habit.completedToday,
+                            showSparkle: sparkleId == habit.id
                         ) {
                             toggle(habit)
                         }
@@ -129,8 +138,10 @@ struct HabitBlock: View {
         withAnimation(.snappy(duration: 0.18)) {
             if wasCompleted {
                 habit.uncompleteToday()
+                sparkleId = nil
             } else {
                 habit.completeToday()
+                sparkleId = habit.id
             }
             pulseId = wasCompleted ? nil : habit.id
         }
@@ -143,6 +154,9 @@ struct HabitBlock: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             if pulseId == habit.id { pulseId = nil }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            if sparkleId == habit.id { sparkleId = nil }
         }
     }
 

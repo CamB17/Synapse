@@ -229,18 +229,48 @@ struct ReviewView: View {
 
     private var highlightsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Highlights")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Theme.textSecondary)
-
             if let bestDay {
+                HStack(spacing: 8) {
+                    ZStack(alignment: .topTrailing) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Theme.accent2)
+
+                            Text("Best day")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Theme.text)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                                .fill(Theme.accent2.opacity(0.12))
+                        )
+                        SparkleOverlay()
+                    }
+                    Spacer(minLength: 0)
+                }
+
                 Text("Best day: \(weekday(bestDay.date)) — \(formatMinutes(bestDay.minutes))")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.text)
             } else {
-                Text("No focus logged yet this week.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Theme.textSecondary)
+                HStack(alignment: .top, spacing: 12) {
+                    Illustration(symbol: "chart.bar", style: .line, size: 28)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Highlights")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.textSecondary)
+
+                        Text("No focus logged yet this week.")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.text)
+                    }
+
+                    Spacer(minLength: 0)
+                }
             }
         }
         .padding(14)

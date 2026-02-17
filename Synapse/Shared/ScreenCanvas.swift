@@ -9,13 +9,15 @@ struct ScreenCanvas<Content: View>: View {
 
     var body: some View {
         ZStack {
-            Theme.heroGradient
-                .opacity(0.55)
+            Theme.canvas
                 .ignoresSafeArea()
 
-            Theme.canvas
-                .opacity(0.85)
-                .ignoresSafeArea()
+            VStack(spacing: 0) {
+                Theme.topDepthGradient
+                    .frame(height: 280)
+                Spacer()
+            }
+            .ignoresSafeArea(edges: .top)
 
             content
         }

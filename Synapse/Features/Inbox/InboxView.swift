@@ -26,53 +26,67 @@ struct InboxView: View {
                 VStack(spacing: 12) {
                     captureRow
 
-                    List {
-                        Section {
-                            ForEach(inbox) { item in
-                                HStack(spacing: 10) {
-                                    Text(item.title)
-                                        .foregroundStyle(Theme.text)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if inbox.isEmpty {
+                        emptyInboxState
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                        Spacer(minLength: 0)
+                    } else {
+                        List {
+                            Section {
+                                ForEach(inbox) { item in
+                                    HStack(spacing: 10) {
+                                        Text(item.title)
+                                            .foregroundStyle(Theme.text)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                                    Button {
-                                        commitToToday(item)
-                                    } label: {
-                                        Label("Today", systemImage: "arrow.up.circle.fill")
-                                            .labelStyle(.titleAndIcon)
+                                        Button {
+                                            commitToToday(item)
+                                        } label: {
+                                            Label("Today", systemImage: "arrow.up.circle.fill")
+                                                .labelStyle(.titleAndIcon)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
                                     }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
-                                }
-                                .padding(14)
-                                .background(
-                                    Theme.surface,
-                                    in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                                )
-                                .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
-                                .matchedGeometryEffect(id: item.id, in: taskNamespace)
-                                .opacity(committingTaskIDs.contains(item.id) ? 0.55 : 1)
-                                .scaleEffect(committingTaskIDs.contains(item.id) ? 0.96 : 1)
-                                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                                .listRowBackground(Color.clear)
-                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                    Button("Today") { commitToToday(item) }
-                                        .tint(Theme.accent)
-                                }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) { delete(item) } label: {
-                                        Text("Delete")
+                                    .padding(14)
+                                    .background(
+                                        Theme.surface,
+                                        in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                                    )
+                                    .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+                                    .matchedGeometryEffect(id: item.id, in: taskNamespace)
+                                    .opacity(committingTaskIDs.contains(item.id) ? 0.55 : 1)
+                                    .scaleEffect(committingTaskIDs.contains(item.id) ? 0.96 : 1)
+                                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                                    .listRowBackground(Color.clear)
+                                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                        Button("Today") { commitToToday(item) }
+                                            .tint(Theme.accent)
                                     }
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) { delete(item) } label: {
+                                            Text("Delete")
+                                        }
+                                    }
+                                }
+                            } header: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "tray")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .symbolRenderingMode(.hierarchical)
+                                        .foregroundStyle(Theme.accent.opacity(0.45))
+
+                                    Text("INBOX (\(inbox.count))")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(Theme.textSecondary)
+                                        .tracking(0.8)
                                 }
                             }
-                        } header: {
-                            Text("INBOX (\(inbox.count))")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(Theme.textSecondary)
-                                .tracking(0.8)
                         }
+                        .scrollContentBackground(.hidden)
+                        .listStyle(.insetGrouped)
                     }
-                    .scrollContentBackground(.hidden)
-                    .listStyle(.insetGrouped)
                 }
             }
             .navigationTitle("Inbox")
@@ -109,6 +123,27 @@ struct InboxView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
+    }
+    
+    private var emptyInboxState: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Illustration(symbol: "tray", style: .line, size: 34)
+
+            Text("Inbox empty.")
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.text)
+
+            Text("Capture things as they pop up.")
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Theme.surface,
+            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        )
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
 
     private func add() {
