@@ -120,6 +120,7 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                HabitBlock()
 
                 if isDayClear {
                     dayClearState

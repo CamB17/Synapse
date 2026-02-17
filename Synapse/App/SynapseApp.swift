@@ -7,6 +7,6 @@ struct SynapseApp: App {
         WindowGroup {
             RootView()
         }
-        .modelContainer(for: [TaskItem.self, FocusSession.self])
+        .modelContainer(for: [TaskItem.self, FocusSession.self, Habit.self])
     }
 }
