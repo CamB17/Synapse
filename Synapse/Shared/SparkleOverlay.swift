@@ -7,11 +7,11 @@ struct SparkleOverlay: View {
         ZStack {
             if show {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(Theme.Typography.iconCompact)
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Theme.accent2.opacity(0.9))
                     .transition(.scale.combined(with: .opacity))
-                    .offset(x: 16, y: -14)
+                    .offset(x: Theme.Spacing.md, y: -Theme.Spacing.cardInset)
             }
         }
         .onAppear {

@@ -33,19 +33,9 @@ struct HabitBlock: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(alignment: .firstTextBaseline) {
-                HStack(spacing: 8) {
-                    Image(systemName: "leaf")
-                        .font(.system(size: 12, weight: .semibold))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(Theme.accent.opacity(0.45))
-
-                    Text("Daily Rituals")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.textSecondary)
-                        .tracking(0.3)
-                }
+                SectionLabel(icon: "leaf", title: "Daily Rituals")
 
                 Spacer()
 
@@ -53,7 +43,7 @@ struct HabitBlock: View {
                     showingManage = true
                 } label: {
                     Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(Theme.Typography.iconMedium)
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -61,41 +51,41 @@ struct HabitBlock: View {
             }
 
             if !pendingHabits.isEmpty {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: "bell.badge")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Theme.Typography.iconSmall)
                         .foregroundStyle(Theme.textSecondary)
 
                     Text(reminderText)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
 
                     Spacer(minLength: 0)
                 }
-                .padding(.bottom, 2)
+                .padding(.bottom, Theme.Spacing.xxxs)
             } else if showHabitsCompleteLine {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: "checkmark.circle")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Theme.Typography.iconSmall)
                         .foregroundStyle(Theme.accent)
                     
                     Text("Habits complete today.")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.textSecondary)
                     
                     Spacer(minLength: 0)
                 }
-                .padding(.bottom, 2)
+                .padding(.bottom, Theme.Spacing.xxxs)
             }
 
             if activeHabits.isEmpty {
                 Text("Add a few daily anchors.")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, Theme.Spacing.xxs)
             } else {
-                VStack(spacing: 1) {
+                VStack(spacing: Theme.Spacing.hairline) {
                     ForEach(activeHabits.prefix(3)) { habit in
                         HabitRow(
                             title: habit.title,
@@ -112,19 +102,15 @@ struct HabitBlock: View {
 
                     if activeHabits.count > 3 {
                         Text("+ \(activeHabits.count - 3) more")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.textSecondary)
-                            .padding(.top, 6)
+                            .padding(.top, Theme.Spacing.xs)
                     }
                 }
             }
         }
-        .padding(12)
-        .background(
-            Theme.surface2.opacity(0.82),
-            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-        )
-        .shadow(color: Theme.cardShadow().opacity(0.45), radius: 6, y: 3)
+        .padding(Theme.Spacing.sm)
+        .surfaceCard(style: .secondary)
         .sheet(isPresented: $showingManage) {
             ManageHabitsView()
         }

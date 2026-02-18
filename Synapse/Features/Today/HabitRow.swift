@@ -8,13 +8,13 @@ struct HabitRow: View {
     let onToggle: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Spacing.sm) {
             Button {
                 onToggle()
             } label: {
                 ZStack {
                     Image(systemName: isCompletedToday ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(Theme.Typography.iconLarge)
                         .foregroundStyle(isCompletedToday ? Theme.accent : Theme.textSecondary)
                         .symbolRenderingMode(.hierarchical)
 
@@ -28,20 +28,20 @@ struct HabitRow: View {
             }
             .buttonStyle(.plain)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(Theme.Typography.itemTitle)
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
 
                 Text(streakText)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
             }
 
             Spacer()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Theme.Spacing.xxs)
     }
 }

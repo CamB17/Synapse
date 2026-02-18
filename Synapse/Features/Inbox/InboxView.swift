@@ -23,20 +23,21 @@ struct InboxView: View {
     var body: some View {
         NavigationStack {
             ScreenCanvas {
-                VStack(spacing: 12) {
+                VStack(spacing: Theme.Spacing.sm) {
                     captureRow
 
                     if inbox.isEmpty {
                         emptyInboxState
-                            .padding(.horizontal, 16)
-                            .padding(.top, 4)
+                            .padding(.horizontal, Theme.Spacing.md)
+                            .padding(.top, Theme.Spacing.xxs)
                         Spacer(minLength: 0)
                     } else {
                         List {
                             Section {
                                 ForEach(inbox) { item in
-                                    HStack(spacing: 10) {
+                                    HStack(spacing: Theme.Spacing.xs) {
                                         Text(item.title)
+                                            .font(Theme.Typography.itemTitle)
                                             .foregroundStyle(Theme.text)
                                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -49,12 +50,8 @@ struct InboxView: View {
                                         .buttonStyle(.bordered)
                                         .controlSize(.small)
                                     }
-                                    .padding(14)
-                                    .background(
-                                        Theme.surface,
-                                        in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                                    )
-                                    .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+                                    .padding(Theme.Spacing.cardInset)
+                                    .surfaceCard()
                                     .matchedGeometryEffect(id: item.id, in: taskNamespace)
                                     .opacity(committingTaskIDs.contains(item.id) ? 0.55 : 1)
                                     .scaleEffect(committingTaskIDs.contains(item.id) ? 0.96 : 1)
@@ -71,17 +68,7 @@ struct InboxView: View {
                                     }
                                 }
                             } header: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "tray")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .symbolRenderingMode(.hierarchical)
-                                        .foregroundStyle(Theme.accent.opacity(0.45))
-
-                                    Text("INBOX (\(inbox.count))")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(Theme.textSecondary)
-                                        .tracking(0.8)
-                                }
+                                SectionLabel(icon: "tray", title: "Inbox (\(inbox.count))")
                             }
                         }
                         .scrollContentBackground(.hidden)
@@ -100,50 +87,33 @@ struct InboxView: View {
     }
 
     private var captureRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Theme.Spacing.xs) {
             TextField("Capture something…", text: $text)
-                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .font(Theme.Typography.bodyMedium)
                 .foregroundStyle(Theme.text)
                 .submitLabel(.done)
                 .onSubmit(add)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, Theme.Spacing.sm)
                 .padding(.vertical, 10)
-                .background(
-                    Theme.surface,
-                    in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
-                )
-                .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+                .surfaceCard(cornerRadius: Theme.radiusSmall)
 
             Button(action: add) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(Theme.Typography.iconXL)
                     .foregroundStyle(Theme.accent)
             }
             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.top, Theme.Spacing.xs)
     }
     
     private var emptyInboxState: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Illustration(symbol: "tray", style: .line, size: 34)
-
-            Text("Inbox empty.")
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundStyle(Theme.text)
-
-            Text("Capture things as they pop up.")
-                .font(.system(size: 15, weight: .medium, design: .rounded))
-                .foregroundStyle(Theme.textSecondary)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            Theme.surface,
-            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        EmptyStatePanel(
+            symbol: "tray",
+            title: "Inbox empty.",
+            subtitle: "Capture things as they pop up."
         )
-        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
 
     private func add() {

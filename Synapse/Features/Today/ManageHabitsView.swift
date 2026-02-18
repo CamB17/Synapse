@@ -17,67 +17,55 @@ struct ManageHabitsView: View {
     var body: some View {
         NavigationStack {
             ScreenCanvas {
-                VStack(spacing: 14) {
-                    HStack(spacing: 10) {
+                VStack(spacing: Theme.Spacing.sm) {
+                    HStack(spacing: Theme.Spacing.xs) {
                         TextField("Add habit...", text: $text)
-                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .font(Theme.Typography.bodyMedium)
                             .foregroundStyle(Theme.text)
                             .submitLabel(.done)
                             .onSubmit(add)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, Theme.Spacing.sm)
                             .padding(.vertical, 10)
-                            .background(
-                                Theme.surface,
-                                in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                            )
-                            .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+                            .surfaceCard()
 
                         Button {
                             add()
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(Theme.Typography.iconXL)
                                 .foregroundStyle(Theme.accent)
                         }
                         .buttonStyle(.plain)
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .opacity(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                    .padding(.horizontal, Theme.Spacing.md)
+                    .padding(.top, Theme.Spacing.xs)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("ACTIVE")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Theme.textSecondary)
-                            .tracking(0.8)
-                            .padding(.horizontal, 16)
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        SectionLabel(icon: "leaf", title: "Active")
+                            .padding(.horizontal, Theme.Spacing.md)
 
                         if activeHabits.isEmpty {
-                            Text("No habits yet. Add your first daily anchor.")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(Theme.textSecondary)
-                                .padding(14)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(
-                                    Theme.surface,
-                                    in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                                )
-                                .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
-                                .padding(.horizontal, 16)
+                            EmptyStatePanel(
+                                symbol: "leaf",
+                                title: "No habits yet.",
+                                subtitle: "Add your first daily anchor."
+                            )
+                            .padding(.horizontal, Theme.Spacing.md)
                         } else {
                             VStack(spacing: 0) {
                                 ForEach(Array(activeHabits.enumerated()), id: \.element.id) { index, habit in
-                                    HStack(spacing: 12) {
+                                    HStack(spacing: Theme.Spacing.sm) {
                                         Text(habit.title)
-                                            .font(.system(size: 17, weight: .medium, design: .rounded))
+                                            .font(Theme.Typography.itemTitle)
                                             .foregroundStyle(Theme.text)
                                             .lineLimit(1)
 
-                                        Spacer(minLength: 8)
+                                        Spacer(minLength: Theme.Spacing.xs)
 
                                         Text("\(habit.currentStreak)")
-                                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                            .font(Theme.Typography.bodyMedium.weight(.semibold))
                                             .foregroundStyle(Theme.textSecondary)
                                             .monospacedDigit()
 
@@ -85,27 +73,23 @@ struct ManageHabitsView: View {
                                             delete(habit)
                                         } label: {
                                             Image(systemName: "minus.circle.fill")
-                                                .font(.system(size: 18, weight: .semibold))
+                                                .font(Theme.Typography.iconCard)
                                                 .foregroundStyle(Theme.textSecondary)
                                         }
                                         .buttonStyle(.plain)
                                         .accessibilityLabel("Remove \(habit.title)")
                                     }
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 12)
+                                    .padding(.horizontal, Theme.Spacing.cardInset)
+                                    .padding(.vertical, Theme.Spacing.sm)
 
                                     if index < activeHabits.count - 1 {
                                         Divider()
-                                            .padding(.leading, 14)
+                                            .padding(.leading, Theme.Spacing.cardInset)
                                     }
                                 }
                             }
-                            .background(
-                                Theme.surface,
-                                in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                            )
-                            .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
-                            .padding(.horizontal, 16)
+                            .surfaceCard()
+                            .padding(.horizontal, Theme.Spacing.md)
                         }
                     }
 
