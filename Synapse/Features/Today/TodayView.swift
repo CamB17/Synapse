@@ -4,6 +4,7 @@ import SwiftData
 
 struct TodayView: View {
     let taskNamespace: Namespace.ID
+    @Binding var externalCaptureRequestID: Int
 
     @Environment(\.modelContext) private var modelContext
 
@@ -125,18 +126,6 @@ struct TodayView: View {
             }
             .navigationTitle("Today")
             .toolbarColorScheme(.light, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingCapture = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(Theme.Typography.iconCard)
-                            .foregroundStyle(Theme.accent)
-                    }
-                    .accessibilityLabel("Capture task")
-                }
-            }
         }
         .sheet(isPresented: $showingCapture) {
             QuickCaptureSheet(
@@ -153,6 +142,14 @@ struct TodayView: View {
         .animation(.snappy(duration: 0.22), value: focusTask)
         .animation(.snappy(duration: 0.18), value: showingCaptureToast)
         .animation(.snappy(duration: 0.18), value: showingFocusLogToast)
+        .onChange(of: externalCaptureRequestID) { _, _ in
+            if focusTask != nil {
+                withAnimation(.snappy(duration: 0.18)) {
+                    focusTask = nil
+                }
+            }
+            showingCapture = true
+        }
     }
 
     private var mainContent: some View {
