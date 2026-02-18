@@ -32,6 +32,14 @@ struct HabitBlock: View {
         activeHabits.count >= 2 && pendingHabits.isEmpty
     }
 
+    private var showsOverflowCue: Bool {
+        activeHabits.count > 3
+    }
+
+    private var overflowCount: Int {
+        max(0, activeHabits.count - 3)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(alignment: .firstTextBaseline) {
@@ -85,28 +93,47 @@ struct HabitBlock: View {
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.vertical, Theme.Spacing.xxs)
             } else {
-                VStack(spacing: Theme.Spacing.hairline) {
-                    ForEach(activeHabits.prefix(3)) { habit in
-                        HabitRow(
-                            title: habit.title,
-                            streakText: streakText(for: habit),
-                            isCompletedToday: habit.completedToday,
-                            showSparkle: sparkleId == habit.id
-                        ) {
-                            toggle(habit)
+                ZStack(alignment: .bottom) {
+                    ScrollView(.vertical) {
+                        VStack(spacing: Theme.Spacing.hairline) {
+                            ForEach(activeHabits) { habit in
+                                HabitRow(
+                                    title: habit.title,
+                                    streakText: streakText(for: habit),
+                                    isCompletedToday: habit.completedToday,
+                                    showSparkle: sparkleId == habit.id
+                                ) {
+                                    toggle(habit)
+                                }
+                                .opacity(habit.completedToday ? 0.65 : 1.0)
+                                .scaleEffect(pulseId == habit.id ? 1.01 : 1.0)
+                                .animation(.snappy(duration: 0.16), value: pulseId)
+                            }
                         }
-                        .opacity(habit.completedToday ? 0.65 : 1.0)
-                        .scaleEffect(pulseId == habit.id ? 1.01 : 1.0)
-                        .animation(.snappy(duration: 0.16), value: pulseId)
                     }
+                    .scrollIndicators(.hidden)
 
-                    if activeHabits.count > 3 {
-                        Text("+ \(activeHabits.count - 3) more")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.textSecondary)
-                            .padding(.top, Theme.Spacing.xs)
+                    if showsOverflowCue {
+                        LinearGradient(
+                            colors: [Theme.surface2.opacity(0), Theme.surface2.opacity(0.96)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 34)
+                        .allowsHitTesting(false)
+
+                        HStack(spacing: Theme.Spacing.xxs) {
+                            Image(systemName: "chevron.down")
+                                .font(Theme.Typography.iconSmall)
+                            Text("Scroll for \(overflowCount) more")
+                                .font(Theme.Typography.caption.weight(.semibold))
+                        }
+                        .foregroundStyle(Theme.textSecondary)
+                        .padding(.bottom, Theme.Spacing.xxxs)
+                        .allowsHitTesting(false)
                     }
                 }
+                .frame(maxHeight: showsOverflowCue ? 180 : .infinity)
             }
         }
         .padding(Theme.Spacing.sm)
