@@ -2,6 +2,9 @@ import SwiftUI
 import SwiftData
 
 struct ManageHabitsView: View {
+    var title: String = "Habits"
+    var showsDoneButton: Bool = true
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -96,12 +99,14 @@ struct ManageHabitsView: View {
                     Spacer(minLength: 0)
                 }
             }
-            .navigationTitle("Habits")
+            .navigationTitle(title)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                        .tint(Theme.accent)
+                if showsDoneButton {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismiss() }
+                            .tint(Theme.accent)
+                    }
                 }
             }
         }
