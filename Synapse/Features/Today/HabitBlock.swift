@@ -9,6 +9,7 @@ struct HabitBlock: View {
 
     @State private var showingManage = false
     @State private var pulseId: UUID?
+    @State private var sparkleId: UUID?
 
     private var activeHabits: [Habit] {
         habits.filter(\.isActive)
@@ -32,12 +33,19 @@ struct HabitBlock: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text("HABITS")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .tracking(0.8)
+                HStack(spacing: 8) {
+                    Image(systemName: "leaf")
+                        .font(.system(size: 12, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(Theme.accent.opacity(0.45))
+
+                    Text("Daily Rituals")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .tracking(0.3)
+                }
 
                 Spacer()
 
@@ -46,7 +54,7 @@ struct HabitBlock: View {
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Manage habits")
@@ -56,11 +64,11 @@ struct HabitBlock: View {
                 HStack(spacing: 8) {
                     Image(systemName: "bell.badge")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
 
                     Text(reminderText)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
 
                     Spacer(minLength: 0)
@@ -70,11 +78,11 @@ struct HabitBlock: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.accent)
                     
                     Text("Habits complete today.")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                     
                     Spacer(minLength: 0)
                 }
@@ -84,15 +92,16 @@ struct HabitBlock: View {
             if activeHabits.isEmpty {
                 Text("Add a few daily anchors.")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .padding(.vertical, 4)
             } else {
-                VStack(spacing: 2) {
-                    ForEach(activeHabits.prefix(6)) { habit in
+                VStack(spacing: 1) {
+                    ForEach(activeHabits.prefix(3)) { habit in
                         HabitRow(
                             title: habit.title,
                             streakText: streakText(for: habit),
-                            isCompletedToday: habit.completedToday
+                            isCompletedToday: habit.completedToday,
+                            showSparkle: sparkleId == habit.id
                         ) {
                             toggle(habit)
                         }
@@ -101,17 +110,21 @@ struct HabitBlock: View {
                         .animation(.snappy(duration: 0.16), value: pulseId)
                     }
 
-                    if activeHabits.count > 6 {
-                        Text("+ \(activeHabits.count - 6) more")
+                    if activeHabits.count > 3 {
+                        Text("+ \(activeHabits.count - 3) more")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textSecondary)
                             .padding(.top, 6)
                     }
                 }
             }
         }
-        .padding(14)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(12)
+        .background(
+            Theme.surface2.opacity(0.82),
+            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        )
+        .shadow(color: Theme.cardShadow().opacity(0.45), radius: 6, y: 3)
         .sheet(isPresented: $showingManage) {
             ManageHabitsView()
         }
@@ -125,8 +138,10 @@ struct HabitBlock: View {
         withAnimation(.snappy(duration: 0.18)) {
             if wasCompleted {
                 habit.uncompleteToday()
+                sparkleId = nil
             } else {
                 habit.completeToday()
+                sparkleId = habit.id
             }
             pulseId = wasCompleted ? nil : habit.id
         }
@@ -139,6 +154,9 @@ struct HabitBlock: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             if pulseId == habit.id { pulseId = nil }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            if sparkleId == habit.id { sparkleId = nil }
         }
     }
 

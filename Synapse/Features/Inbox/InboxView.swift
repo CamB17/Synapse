@@ -22,47 +22,75 @@ struct InboxView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                captureRow
+            ScreenCanvas {
+                VStack(spacing: 12) {
+                    captureRow
 
-                List {
-                    Section(header: Text("INBOX (\(inbox.count))")) {
-                        ForEach(inbox) { item in
-                            HStack(spacing: 10) {
-                                Text(item.title)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if inbox.isEmpty {
+                        emptyInboxState
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                        Spacer(minLength: 0)
+                    } else {
+                        List {
+                            Section {
+                                ForEach(inbox) { item in
+                                    HStack(spacing: 10) {
+                                        Text(item.title)
+                                            .foregroundStyle(Theme.text)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                                Button {
-                                    commitToToday(item)
-                                } label: {
-                                    Label("Today", systemImage: "arrow.up.circle.fill")
-                                        .labelStyle(.titleAndIcon)
+                                        Button {
+                                            commitToToday(item)
+                                        } label: {
+                                            Label("Today", systemImage: "arrow.up.circle.fill")
+                                                .labelStyle(.titleAndIcon)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
+                                    }
+                                    .padding(14)
+                                    .background(
+                                        Theme.surface,
+                                        in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                                    )
+                                    .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+                                    .matchedGeometryEffect(id: item.id, in: taskNamespace)
+                                    .opacity(committingTaskIDs.contains(item.id) ? 0.55 : 1)
+                                    .scaleEffect(committingTaskIDs.contains(item.id) ? 0.96 : 1)
+                                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                                    .listRowBackground(Color.clear)
+                                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                        Button("Today") { commitToToday(item) }
+                                            .tint(Theme.accent)
+                                    }
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) { delete(item) } label: {
+                                            Text("Delete")
+                                        }
+                                    }
                                 }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                            }
-                            .padding(14)
-                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .matchedGeometryEffect(id: item.id, in: taskNamespace)
-                            .opacity(committingTaskIDs.contains(item.id) ? 0.55 : 1)
-                            .scaleEffect(committingTaskIDs.contains(item.id) ? 0.96 : 1)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                            .listRowBackground(Color.clear)
-                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                Button("Today") { commitToToday(item) }
-                                    .tint(.blue)
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) { delete(item) } label: {
-                                    Text("Delete")
+                            } header: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "tray")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .symbolRenderingMode(.hierarchical)
+                                        .foregroundStyle(Theme.accent.opacity(0.45))
+
+                                    Text("INBOX (\(inbox.count))")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(Theme.textSecondary)
+                                        .tracking(0.8)
                                 }
                             }
                         }
+                        .scrollContentBackground(.hidden)
+                        .listStyle(.insetGrouped)
                     }
                 }
-                .listStyle(.insetGrouped)
             }
             .navigationTitle("Inbox")
+            .toolbarColorScheme(.light, for: .navigationBar)
             .alert("Today is full", isPresented: $showCapAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -74,18 +102,48 @@ struct InboxView: View {
     private var captureRow: some View {
         HStack(spacing: 10) {
             TextField("Capture something…", text: $text)
-                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .foregroundStyle(Theme.text)
                 .submitLabel(.done)
                 .onSubmit(add)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    Theme.surface,
+                    in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                )
+                .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
 
             Button(action: add) {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
             }
             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
+    }
+    
+    private var emptyInboxState: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Illustration(symbol: "tray", style: .line, size: 34)
+
+            Text("Inbox empty.")
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.text)
+
+            Text("Capture things as they pop up.")
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Theme.surface,
+            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        )
+        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
 
     private func add() {
@@ -105,7 +163,7 @@ struct InboxView: View {
         haptic.impactOccurred()
 
         withAnimation(.snappy(duration: 0.18)) {
-            committingTaskIDs.insert(item.id)
+            _ = committingTaskIDs.insert(item.id)
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {

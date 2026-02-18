@@ -1,8 +1,10 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
     @Namespace private var taskNamespace
     @State private var selectedTab: Tab = .today
+    @State private var didConfigureTabBarAppearance = false
 
     private enum Tab: Hashable {
         case today
@@ -31,5 +33,42 @@ struct RootView: View {
                 .tabItem { Label("Review", systemImage: "chart.bar") }
                 .tag(Tab.review)
         }
+        .tint(Theme.accent)
+        .toolbarColorScheme(.light, for: .tabBar)
+        .toolbarBackground(Theme.surface, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .onAppear {
+            configureTabBarAppearance()
+        }
+    }
+
+    private func configureTabBarAppearance() {
+        guard !didConfigureTabBarAppearance else { return }
+        didConfigureTabBarAppearance = true
+
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor(Theme.surface)
+        appearance.shadowColor = UIColor.black.withAlphaComponent(0.08)
+
+        let normalIcon = UIColor(Theme.textSecondary).withAlphaComponent(0.85)
+        let selectedIcon = UIColor(Theme.accent)
+
+        let normalTitle = UIColor(Theme.textSecondary)
+        let selectedTitle = UIColor(Theme.accent)
+
+        let itemAppearance = UITabBarItemAppearance(style: .stacked)
+        itemAppearance.normal.iconColor = normalIcon
+        itemAppearance.normal.titleTextAttributes = [.foregroundColor: normalTitle]
+        itemAppearance.selected.iconColor = selectedIcon
+        itemAppearance.selected.titleTextAttributes = [.foregroundColor: selectedTitle]
+
+        appearance.stackedLayoutAppearance = itemAppearance
+        appearance.inlineLayoutAppearance = itemAppearance
+        appearance.compactInlineLayoutAppearance = itemAppearance
+
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+        UITabBar.appearance().unselectedItemTintColor = normalIcon
     }
 }
