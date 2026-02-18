@@ -35,17 +35,7 @@ struct HabitBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                HStack(spacing: 8) {
-                    Image(systemName: "leaf")
-                        .font(.system(size: 12, weight: .semibold))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(Theme.accent.opacity(0.45))
-
-                    Text("Daily Rituals")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.textSecondary)
-                        .tracking(0.3)
-                }
+                SectionLabel(icon: "leaf", title: "Daily Rituals")
 
                 Spacer()
 
@@ -120,11 +110,7 @@ struct HabitBlock: View {
             }
         }
         .padding(12)
-        .background(
-            Theme.surface2.opacity(0.82),
-            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-        )
-        .shadow(color: Theme.cardShadow().opacity(0.45), radius: 6, y: 3)
+        .surfaceCard(style: .secondary)
         .sheet(isPresented: $showingManage) {
             ManageHabitsView()
         }

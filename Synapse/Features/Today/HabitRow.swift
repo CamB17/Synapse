@@ -8,7 +8,7 @@ struct HabitRow: View {
     let onToggle: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Spacing.sm) {
             Button {
                 onToggle()
             } label: {
@@ -28,14 +28,14 @@ struct HabitRow: View {
             }
             .buttonStyle(.plain)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(Theme.Typography.itemTitle)
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
 
                 Text(streakText)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
             }

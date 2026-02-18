@@ -123,11 +123,11 @@ struct ReviewView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("This Week")
-                .font(.system(size: 22, weight: .semibold))
+                .font(Theme.Typography.titleLarge)
                 .foregroundStyle(Theme.text)
 
             Text(formattedWeekRange())
-                .font(.system(size: 14, weight: .medium))
+                .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
         }
         .padding(.top, 6)
@@ -137,7 +137,8 @@ struct ReviewView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Focus")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Theme.Typography.sectionLabel)
+                    .tracking(Theme.Typography.sectionTracking)
                     .foregroundStyle(Theme.textSecondary)
 
                 Spacer()
@@ -181,17 +182,13 @@ struct ReviewView: View {
 
             if let bestDay {
                 Text("Peak: \(weekday(bestDay.date))")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.top, 4)
             }
         }
         .padding(14)
-        .background(
-            Theme.surface,
-            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-        )
-        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+        .surfaceCard()
     }
 
     private var kpiGrid: some View {
@@ -210,75 +207,54 @@ struct ReviewView: View {
     private func kpiCard(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
-                .font(.system(size: 22, weight: .semibold))
+                .font(Theme.Typography.statValue)
                 .foregroundStyle(Theme.text)
                 .contentTransition(.numericText())
 
             Text(label)
-                .font(.system(size: 12, weight: .medium))
+                .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            Theme.surface,
-            in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
-        )
-        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+        .surfaceCard(cornerRadius: Theme.radiusSmall)
     }
 
     private var highlightsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             if let bestDay {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.xs) {
                     ZStack(alignment: .topTrailing) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(Theme.accent2)
-
-                            Text("Best day")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Theme.text)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 999, style: .continuous)
-                                .fill(Theme.accent2.opacity(0.12))
-                        )
+                        StatusChip(text: "Best day", icon: "star.fill", tone: .accent2)
                         SparkleOverlay()
                     }
                     Spacer(minLength: 0)
                 }
 
                 Text("Best day: \(weekday(bestDay.date)) — \(formatMinutes(bestDay.minutes))")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(Theme.Typography.bodyMedium.weight(.semibold))
                     .foregroundStyle(Theme.text)
             } else {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                     Illustration(symbol: "chart.bar", style: .line, size: 28)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Highlights")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Theme.textSecondary)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Highlights")
+                                .font(Theme.Typography.sectionLabel)
+                                .tracking(Theme.Typography.sectionTracking)
+                                .foregroundStyle(Theme.textSecondary)
 
-                        Text("No focus logged yet this week.")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Theme.text)
-                    }
+                            Text("No focus logged yet this week.")
+                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Theme.text)
+                        }
 
                     Spacer(minLength: 0)
                 }
             }
         }
         .padding(14)
-        .background(
-            Theme.surface,
-            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-        )
-        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+        .surfaceCard()
     }
 
     // MARK: - Formatting

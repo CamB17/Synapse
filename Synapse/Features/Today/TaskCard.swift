@@ -43,7 +43,7 @@ struct TaskCard: View {
 
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(Theme.Typography.bodySmall)
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -52,11 +52,7 @@ struct TaskCard: View {
         }
         .contentShape(Rectangle())
         .padding(14)
-        .background(
-            isCompleted ? Theme.accent.opacity(0.06) : Theme.surface,
-            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-        )
-        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+        .surfaceCard(style: isCompleted ? .accentTint : .primary, cornerRadius: Theme.radius)
         .scaleEffect(isCompleted ? (completedAppear ? 1 : 0.985) : 1)
         .animation(.snappy(duration: 0.18), value: completedAppear)
         .matchedGeometryEffect(id: id, in: namespace)

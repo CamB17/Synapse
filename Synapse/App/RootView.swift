@@ -56,12 +56,19 @@ struct RootView: View {
 
         let normalTitle = UIColor(Theme.textSecondary)
         let selectedTitle = UIColor(Theme.accent)
+        let labelFont = roundedTabFont()
 
         let itemAppearance = UITabBarItemAppearance(style: .stacked)
         itemAppearance.normal.iconColor = normalIcon
-        itemAppearance.normal.titleTextAttributes = [.foregroundColor: normalTitle]
+        itemAppearance.normal.titleTextAttributes = [
+            .foregroundColor: normalTitle,
+            .font: labelFont
+        ]
         itemAppearance.selected.iconColor = selectedIcon
-        itemAppearance.selected.titleTextAttributes = [.foregroundColor: selectedTitle]
+        itemAppearance.selected.titleTextAttributes = [
+            .foregroundColor: selectedTitle,
+            .font: labelFont
+        ]
 
         appearance.stackedLayoutAppearance = itemAppearance
         appearance.inlineLayoutAppearance = itemAppearance
@@ -70,5 +77,11 @@ struct RootView: View {
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
         UITabBar.appearance().unselectedItemTintColor = normalIcon
+    }
+
+    private func roundedTabFont() -> UIFont {
+        let base = UIFont.systemFont(ofSize: 11, weight: .semibold)
+        guard let descriptor = base.fontDescriptor.withDesign(.rounded) else { return base }
+        return UIFont(descriptor: descriptor, size: 11)
     }
 }

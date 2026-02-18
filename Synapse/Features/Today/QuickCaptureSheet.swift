@@ -14,43 +14,35 @@ struct QuickCaptureSheet: View {
     var body: some View {
         NavigationStack {
             ScreenCanvas {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     TextField(placeholder, text: $text, axis: .vertical)
-                        .font(.system(size: 17, weight: .medium, design: .rounded))
+                        .font(Theme.Typography.itemTitle)
                         .foregroundStyle(Theme.text)
                         .lineLimit(4, reservesSpace: true)
                         .textInputAutocapitalization(.sentences)
                         .padding(14)
-                        .background(
-                            Theme.surface,
-                            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                        )
-                        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
-                        .padding(.top, 8)
+                        .surfaceCard()
+                        .padding(.top, Theme.Spacing.xs)
 
                     if canAddToToday {
-                        HStack(spacing: 12) {
+                        HStack(spacing: Theme.Spacing.sm) {
                             Text("Add directly to Today")
-                                .font(.system(size: 16, weight: .medium, design: .rounded))
+                                .font(Theme.Typography.bodyMedium)
                                 .foregroundStyle(Theme.text)
 
-                            Spacer(minLength: 8)
+                            Spacer(minLength: Theme.Spacing.xs)
 
                             Toggle("", isOn: $addToToday)
                                 .labelsHidden()
                                 .tint(Theme.accent)
                         }
                         .padding(14)
-                        .background(
-                            Theme.surface,
-                            in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
-                        )
-                        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+                        .surfaceCard(cornerRadius: Theme.radiusSmall)
                     }
 
                     Spacer(minLength: 0)
                 }
-                .padding(16)
+                .padding(Theme.Spacing.md)
             }
             .navigationTitle("Capture")
             .toolbarColorScheme(.light, for: .navigationBar)

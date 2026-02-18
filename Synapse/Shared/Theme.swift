@@ -50,4 +50,22 @@ enum Theme {
     static func cardShadow() -> Color { .black.opacity(0.06) }
     static let shadowRadius: CGFloat = 12
     static let shadowY: CGFloat = 6
+
+    enum Spacing {
+        static let xxs: CGFloat = 4
+        static let xs: CGFloat = 8
+        static let sm: CGFloat = 12
+        static let md: CGFloat = 16
+    }
+
+    enum Typography {
+        static let titleLarge = Font.system(size: 22, weight: .semibold, design: .rounded)
+        static let sectionLabel = Font.system(size: 12, weight: .semibold, design: .rounded)
+        static let sectionTracking: CGFloat = 0.3
+        static let chipLabel = Font.system(size: 11, weight: .semibold, design: .rounded)
+        static let itemTitle = Font.system(size: 15, weight: .semibold, design: .rounded)
+        static let bodyMedium = Font.system(size: 15, weight: .medium, design: .rounded)
+        static let bodySmall = Font.system(size: 13, weight: .medium, design: .rounded)
+        static let statValue = Font.system(size: 22, weight: .semibold, design: .rounded)
+    }
 }

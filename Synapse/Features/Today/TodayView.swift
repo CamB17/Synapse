@@ -28,6 +28,7 @@ struct TodayView: View {
     @State private var focusLogDismissWorkItem: DispatchWorkItem?
     @State private var pulsing = false
     @State private var showingCompletedReview = false
+    @State private var showingTaskCompleteSparkle = false
 
     private var todayCap: Int { 5 }
     private var remainingCount: Int { todayTasks.count }
@@ -156,7 +157,7 @@ struct TodayView: View {
 
     private var mainContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 header
                 HabitBlock()
 
@@ -169,14 +170,14 @@ struct TodayView: View {
                 performanceTile
                 dailyInsightTile
             }
-            .padding(16)
+            .padding(Theme.Spacing.md)
         }
         .background(Theme.canvas.opacity(isDayClear ? 0.35 : 0.0))
         .animation(.snappy(duration: 0.18), value: isDayClear)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(alignment: .firstTextBaseline) {
                 Text("\(completedTodayCount)")
                     .font(.system(size: 40, weight: .semibold, design: .rounded))
@@ -187,31 +188,25 @@ struct TodayView: View {
                     .foregroundStyle(Theme.textSecondary)
             }
             
-            Text(headerMicroLine.uppercased())
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .tracking(0.7)
-                .foregroundStyle(Theme.accent.opacity(0.9))
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Theme.accent.opacity(0.1))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(Theme.accent.opacity(0.16), lineWidth: 0.5)
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                .animation(.snappy(duration: 0.2), value: headerMicroLine)
+            ZStack(alignment: .topTrailing) {
+                StatusChip(text: headerMicroLine, tone: .accent, uppercased: true)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .animation(.snappy(duration: 0.2), value: headerMicroLine)
 
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                if showingTaskCompleteSparkle {
+                    SparkleOverlay()
+                        .offset(x: 4, y: -4)
+                }
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xxs) {
                 Text("\(formatMinutes(focusSecondsToday))")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(Theme.Typography.bodyMedium)
                     .foregroundStyle(Theme.textSecondary)
                     .contentTransition(.numericText())
 
                 Text("focused")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(Theme.Typography.bodyMedium)
                     .foregroundStyle(Theme.textSecondary)
             }
             
@@ -238,49 +233,21 @@ struct TodayView: View {
     }
 
     private var dayClearState: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack(alignment: .topTrailing) {
-                Illustration(symbol: "checkmark.circle", style: .playful, size: 34)
-                SparkleOverlay()
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Board clear.")
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Theme.text)
-
-                Text("Capture anything that comes up.")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundStyle(Theme.textSecondary)
-            }
-
-            Spacer()
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            Theme.surface,
-            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        EmptyStatePanel(
+            symbol: "checkmark.circle",
+            title: "Board clear.",
+            subtitle: "Capture anything that comes up.",
+            playful: true,
+            showSparkle: true
         )
-        .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
         .transition(.opacity)
     }
 
     private var remainingSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "circle.dashed")
-                    .font(.system(size: 12, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Theme.accent.opacity(0.45))
-
-                Text("Commitments (\(remainingCount))")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.textSecondary)
-                    .tracking(0.3)
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.18), value: remainingCount)
-            }
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            SectionLabel(icon: "circle.dashed", title: "Commitments (\(remainingCount))")
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.18), value: remainingCount)
 
             VStack(spacing: 8) {
                 ForEach(todayTasks) { task in
@@ -308,12 +275,12 @@ struct TodayView: View {
         Button {
             showingCompletedReview = true
         } label: {
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .center, spacing: Theme.Spacing.sm) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Completed Today")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Theme.Typography.sectionLabel)
+                        .tracking(Theme.Typography.sectionTracking)
                         .foregroundStyle(Theme.textSecondary)
-                        .tracking(0.6)
 
                     Text("\(completedTodayCount) \(completedTodayCount == 1 ? "action" : "actions")")
                         .font(.system(size: 19, weight: .semibold, design: .rounded))
@@ -321,7 +288,7 @@ struct TodayView: View {
                         .contentTransition(.numericText())
 
                     Text("Tap to review")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Theme.Typography.bodySmall)
                         .foregroundStyle(Theme.textSecondary)
                 }
 
@@ -332,22 +299,18 @@ struct TodayView: View {
                     .foregroundStyle(Theme.textSecondary.opacity(0.8))
             }
             .padding(14)
-            .background(
-                Theme.surface,
-                in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-            )
-            .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
+            .surfaceCard()
         }
         .buttonStyle(.plain)
     }
     
     private var dailyInsightTile: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Theme.Spacing.xs) {
             Image(systemName: "sparkles")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Theme.accent.opacity(0.5))
             Text(dailyInsightLine)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
             Spacer(minLength: 0)
         }
@@ -365,6 +328,7 @@ struct TodayView: View {
         }
         try? modelContext.save()
         pulseHeader()
+        triggerTaskCompleteSparkle()
     }
 
     private func formatMinutes(_ seconds: Int) -> String {
@@ -472,6 +436,15 @@ struct TodayView: View {
             withAnimation(.snappy(duration: 0.18)) {
                 pulsing = false
             }
+        }
+    }
+
+    private func triggerTaskCompleteSparkle() {
+        showingTaskCompleteSparkle = false
+        showingTaskCompleteSparkle = true
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            showingTaskCompleteSparkle = false
         }
     }
 }
