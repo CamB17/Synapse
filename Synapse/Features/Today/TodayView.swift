@@ -454,6 +454,41 @@ struct TodayView: View {
 private struct CompletedTodaySheet: View {
     @Environment(\.dismiss) private var dismiss
     let tasks: [TaskItem]
+    private let calendar = Calendar.current
+
+    private enum TimeBlock: Int, CaseIterable {
+        case morning
+        case afternoon
+        case evening
+
+        var title: String {
+            switch self {
+            case .morning: return "Morning"
+            case .afternoon: return "Afternoon"
+            case .evening: return "Evening"
+            }
+        }
+
+        static func from(date: Date, calendar: Calendar) -> TimeBlock {
+            let hour = calendar.component(.hour, from: date)
+            if hour < 12 { return .morning }
+            if hour < 17 { return .afternoon }
+            return .evening
+        }
+    }
+
+    private var groupedTasks: [(block: TimeBlock, items: [TaskItem])] {
+        let groups = Dictionary(grouping: tasks) { task in
+            let completedAt = task.completedAt ?? .now
+            return TimeBlock.from(date: completedAt, calendar: calendar)
+        }
+
+        return TimeBlock.allCases.compactMap { block in
+            guard var items = groups[block], !items.isEmpty else { return nil }
+            items.sort { ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast) }
+            return (block, items)
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -472,26 +507,29 @@ private struct CompletedTodaySheet: View {
                     .padding(Theme.Spacing.md)
                 } else {
                     List {
-                        ForEach(tasks) { task in
-                            HStack(spacing: Theme.Spacing.xs) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(Theme.Typography.iconCard)
-                                    .foregroundStyle(Theme.accent)
+                        ForEach(groupedTasks, id: \.block) { group in
+                            Section {
+                                ForEach(group.items) { task in
+                                    HStack(spacing: Theme.Spacing.xs) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(Theme.Typography.iconCard)
+                                            .foregroundStyle(Theme.accent)
 
-                                VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
-                                    Text(task.title)
-                                        .font(Theme.Typography.itemTitle)
-                                        .foregroundStyle(Theme.text)
-                                    if let completedAt = task.completedAt {
-                                        Text(timeFormatter.string(from: completedAt))
-                                            .font(Theme.Typography.caption)
-                                            .foregroundStyle(Theme.textSecondary)
+                                        Text(task.title)
+                                            .font(Theme.Typography.itemTitle)
+                                            .foregroundStyle(Theme.text)
+
+                                        Spacer(minLength: 0)
                                     }
+                                    .padding(.vertical, 2)
+                                    .listRowBackground(Theme.surface)
                                 }
-                                Spacer(minLength: 0)
+                            } header: {
+                                Text(group.block.title)
+                                    .font(Theme.Typography.sectionLabel)
+                                    .tracking(Theme.Typography.sectionTracking)
+                                    .foregroundStyle(Theme.textSecondary)
                             }
-                            .padding(.vertical, 2)
-                            .listRowBackground(Theme.surface)
                         }
                     }
                     .scrollContentBackground(.hidden)
@@ -508,12 +546,6 @@ private struct CompletedTodaySheet: View {
             }
         }
         .toolbarColorScheme(.light, for: .navigationBar)
-    }
-
-    private var timeFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter
     }
 }
 
