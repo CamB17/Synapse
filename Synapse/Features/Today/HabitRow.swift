@@ -14,7 +14,7 @@ struct HabitRow: View {
             } label: {
                 ZStack {
                     Image(systemName: isCompletedToday ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(Theme.Typography.iconLarge)
                         .foregroundStyle(isCompletedToday ? Theme.accent : Theme.textSecondary)
                         .symbolRenderingMode(.hierarchical)
 
@@ -42,6 +42,6 @@ struct HabitRow: View {
 
             Spacer()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Theme.Spacing.xxs)
     }
 }

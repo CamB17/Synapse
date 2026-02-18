@@ -105,7 +105,7 @@ struct TodayView: View {
                     }
 
                     if showingCaptureToast || showingFocusLogToast {
-                        VStack(spacing: 8) {
+                        VStack(spacing: Theme.Spacing.xs) {
                             if showingFocusLogToast {
                                 focusLogToast
                                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -116,8 +116,8 @@ struct TodayView: View {
                                     .transition(.move(edge: .bottom).combined(with: .opacity))
                             }
                         }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 16)
+                            .padding(.horizontal, Theme.Spacing.md)
+                            .padding(.bottom, Theme.Spacing.md)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                             .zIndex(15)
                     }
@@ -131,7 +131,7 @@ struct TodayView: View {
                         showingCapture = true
                     } label: {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(Theme.Typography.iconCard)
                             .foregroundStyle(Theme.accent)
                     }
                     .accessibilityLabel("Capture task")
@@ -180,11 +180,11 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(alignment: .firstTextBaseline) {
                 Text("\(completedTodayCount)")
-                    .font(.system(size: 40, weight: .semibold, design: .rounded))
+                    .font(Theme.Typography.heroValue)
                     .contentTransition(.numericText())
 
                 Text("/ \(headerDenominator)")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(Theme.Typography.heroDenominator)
                     .foregroundStyle(Theme.textSecondary)
             }
             
@@ -195,7 +195,7 @@ struct TodayView: View {
 
                 if showingTaskCompleteSparkle {
                     SparkleOverlay()
-                        .offset(x: 4, y: -4)
+                        .offset(x: Theme.Spacing.xxs, y: -Theme.Spacing.xxs)
                 }
             }
 
@@ -249,7 +249,7 @@ struct TodayView: View {
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.18), value: remainingCount)
 
-            VStack(spacing: 8) {
+            VStack(spacing: Theme.Spacing.xs) {
                 ForEach(todayTasks) { task in
                     SwipeCompleteRow(
                         onComplete: { complete(task) },
@@ -276,14 +276,19 @@ struct TodayView: View {
             showingCompletedReview = true
         } label: {
             HStack(alignment: .center, spacing: Theme.Spacing.sm) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Completed Today")
-                        .font(Theme.Typography.sectionLabel)
-                        .tracking(Theme.Typography.sectionTracking)
-                        .foregroundStyle(Theme.textSecondary)
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                    HStack(spacing: Theme.Spacing.xxs) {
+                        Image(systemName: "checkmark.seal")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.accent.opacity(0.55))
+                        Text("Completed Today")
+                            .font(Theme.Typography.sectionLabel)
+                            .tracking(Theme.Typography.sectionTracking)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
 
                     Text("\(completedTodayCount) \(completedTodayCount == 1 ? "action" : "actions")")
-                        .font(.system(size: 19, weight: .semibold, design: .rounded))
+                        .font(Theme.Typography.tileValue)
                         .foregroundStyle(Theme.text)
                         .contentTransition(.numericText())
 
@@ -295,10 +300,10 @@ struct TodayView: View {
                 Spacer(minLength: 0)
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.textSecondary.opacity(0.8))
             }
-            .padding(14)
+            .padding(Theme.Spacing.cardInset)
             .surfaceCard()
         }
         .buttonStyle(.plain)
@@ -307,7 +312,7 @@ struct TodayView: View {
     private var dailyInsightTile: some View {
         HStack(spacing: Theme.Spacing.xs) {
             Image(systemName: "sparkles")
-                .font(.system(size: 12, weight: .semibold))
+                .font(Theme.Typography.caption.weight(.semibold))
                 .foregroundStyle(Theme.accent.opacity(0.5))
             Text(dailyInsightLine)
                 .font(Theme.Typography.bodySmall)
@@ -340,9 +345,9 @@ struct TodayView: View {
     }
 
     private var captureToast: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Theme.Spacing.xs) {
             Text("Added to Inbox")
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Typography.bodySmallStrong)
                 .foregroundStyle(Theme.text)
 
             Spacer()
@@ -351,27 +356,27 @@ struct TodayView: View {
                 Button("Commit") {
                     commitToToday(task)
                 }
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Typography.bodySmallStrong)
                 .foregroundStyle(Theme.accent)
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Theme.Spacing.cardInset)
+        .padding(.vertical, Theme.Spacing.sm)
         .background(Theme.surface, in: Capsule(style: .continuous))
         .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
 
     private var focusLogToast: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Theme.Spacing.xs) {
             Text(focusLogMessage)
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Typography.bodySmallStrong)
                 .foregroundStyle(Theme.text)
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Theme.Spacing.cardInset)
+        .padding(.vertical, Theme.Spacing.sm)
         .background(Theme.surface, in: Capsule(style: .continuous))
         .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
@@ -457,32 +462,32 @@ private struct CompletedTodaySheet: View {
         NavigationStack {
             Group {
                 if tasks.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                         Text("Nothing completed yet today.")
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .font(Theme.Typography.bodyMedium.weight(.semibold))
                             .foregroundStyle(Theme.text)
                         Text("Complete one commitment to start momentum.")
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .font(Theme.Typography.bodySmall)
                             .foregroundStyle(Theme.textSecondary)
                         Spacer(minLength: 0)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(16)
+                    .padding(Theme.Spacing.md)
                 } else {
                     List {
                         ForEach(tasks) { task in
-                            HStack(spacing: 10) {
+                            HStack(spacing: Theme.Spacing.xs) {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 18, weight: .semibold))
+                                    .font(Theme.Typography.iconCard)
                                     .foregroundStyle(Theme.accent)
 
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
                                     Text(task.title)
-                                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                        .font(Theme.Typography.itemTitle)
                                         .foregroundStyle(Theme.text)
                                     if let completedAt = task.completedAt {
                                         Text(timeFormatter.string(from: completedAt))
-                                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                                            .font(Theme.Typography.caption)
                                             .foregroundStyle(Theme.textSecondary)
                                     }
                                 }
@@ -540,13 +545,13 @@ private struct SwipeCompleteRow<Content: View>: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Theme.success.opacity(0.18))
                 .overlay(alignment: .trailing) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: Theme.Spacing.compact) {
                         Image(systemName: "checkmark")
                         Text("Complete")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(Theme.Typography.labelSmallStrong)
                     }
                     .foregroundStyle(Theme.success)
-                    .padding(.trailing, 16)
+                    .padding(.trailing, Theme.Spacing.md)
                     .opacity(min(1, abs(activeOffset) / abs(revealOffset)))
                 }
 

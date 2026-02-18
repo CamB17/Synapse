@@ -32,7 +32,7 @@ struct ManageHabitsView: View {
                             add()
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(Theme.Typography.iconXL)
                                 .foregroundStyle(Theme.accent)
                         }
                         .buttonStyle(.plain)
@@ -73,18 +73,18 @@ struct ManageHabitsView: View {
                                             delete(habit)
                                         } label: {
                                             Image(systemName: "minus.circle.fill")
-                                                .font(.system(size: 18, weight: .semibold))
+                                                .font(Theme.Typography.iconCard)
                                                 .foregroundStyle(Theme.textSecondary)
                                         }
                                         .buttonStyle(.plain)
                                         .accessibilityLabel("Remove \(habit.title)")
                                     }
-                                    .padding(.horizontal, 14)
+                                    .padding(.horizontal, Theme.Spacing.cardInset)
                                     .padding(.vertical, Theme.Spacing.sm)
 
                                     if index < activeHabits.count - 1 {
                                         Divider()
-                                            .padding(.leading, 14)
+                                            .padding(.leading, Theme.Spacing.cardInset)
                                     }
                                 }
                             }

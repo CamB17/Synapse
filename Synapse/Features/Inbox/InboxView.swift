@@ -50,7 +50,7 @@ struct InboxView: View {
                                         .buttonStyle(.bordered)
                                         .controlSize(.small)
                                     }
-                                    .padding(14)
+                                    .padding(Theme.Spacing.cardInset)
                                     .surfaceCard()
                                     .matchedGeometryEffect(id: item.id, in: taskNamespace)
                                     .opacity(committingTaskIDs.contains(item.id) ? 0.55 : 1)
@@ -99,7 +99,7 @@ struct InboxView: View {
 
             Button(action: add) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(Theme.Typography.iconXL)
                     .foregroundStyle(Theme.accent)
             }
             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

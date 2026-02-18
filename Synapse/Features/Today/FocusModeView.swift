@@ -22,7 +22,7 @@ struct FocusModeView: View {
                 .ignoresSafeArea()
                 .transition(.opacity)
 
-            VStack(spacing: 14) {
+            VStack(spacing: Theme.Spacing.cardInset) {
                 heroCard
 
                 timerBlock
@@ -31,18 +31,18 @@ struct FocusModeView: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 20)
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.top, Theme.Spacing.sm)
+            .padding(.bottom, Theme.Spacing.cardInset)
         }
         .onDisappear { timer?.invalidate() }
     }
 
     private var heroCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack {
                 Text("Focus")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(Theme.Typography.labelSmallStrong)
                     .foregroundStyle(Theme.textSecondary)
 
                 Spacer()
@@ -55,19 +55,19 @@ struct FocusModeView: View {
                     }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(Theme.Typography.iconXL)
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .buttonStyle(.plain)
             }
 
             Text(task.title)
-                .font(.system(size: 20, weight: .semibold))
+                .font(Theme.Typography.titleMedium)
                 .foregroundStyle(Theme.text)
                 .multilineTextAlignment(.leading)
                 .lineLimit(3)
         }
-        .padding(14)
+        .padding(Theme.Spacing.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             Theme.surface2,
@@ -78,26 +78,26 @@ struct FocusModeView: View {
     }
 
     private var timerBlock: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: Theme.Spacing.compact) {
             Text(timeString(elapsedSeconds))
-                .font(.system(size: 52, weight: .semibold, design: .rounded))
+                .font(Theme.Typography.timerDisplay)
                 .contentTransition(.numericText())
 
             Text("Total on this task: \(formatMinutes(task.focusSeconds))")
-                .font(.system(size: 14, weight: .medium))
+                .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
         }
-        .padding(.top, 6)
+        .padding(.top, Theme.Spacing.compact)
     }
 
     private var controls: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Spacing.sm) {
             Button {
                 if isRunning { pause() } else { start() }
             } label: {
                 Text(isRunning ? "Pause" : "Start")
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, Theme.Spacing.cardInset)
             }
             .buttonStyle(.borderedProminent)
             .tint(Theme.accent)
@@ -107,12 +107,12 @@ struct FocusModeView: View {
             } label: {
                 Text("End")
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, Theme.Spacing.cardInset)
             }
             .buttonStyle(.bordered)
             .disabled(elapsedSeconds == 0)
         }
-        .padding(.top, 6)
+        .padding(.top, Theme.Spacing.compact)
     }
 
     private func start() {

@@ -20,7 +20,7 @@ struct QuickCaptureSheet: View {
                         .foregroundStyle(Theme.text)
                         .lineLimit(4, reservesSpace: true)
                         .textInputAutocapitalization(.sentences)
-                        .padding(14)
+                        .padding(Theme.Spacing.cardInset)
                         .surfaceCard()
                         .padding(.top, Theme.Spacing.xs)
 
@@ -36,7 +36,7 @@ struct QuickCaptureSheet: View {
                                 .labelsHidden()
                                 .tint(Theme.accent)
                         }
-                        .padding(14)
+                        .padding(Theme.Spacing.cardInset)
                         .surfaceCard(cornerRadius: Theme.radiusSmall)
                     }
 

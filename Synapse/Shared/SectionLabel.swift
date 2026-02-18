@@ -7,7 +7,7 @@ struct SectionLabel: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.xs) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
+                .font(Theme.Typography.iconSmall)
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(Theme.accent.opacity(0.45))
 

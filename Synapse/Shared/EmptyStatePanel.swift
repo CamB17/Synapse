@@ -16,9 +16,9 @@ struct EmptyStatePanel: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.compact) {
                 Text(title)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(Theme.Typography.panelTitle)
                     .foregroundStyle(Theme.text)
 
                 Text(subtitle)
@@ -28,7 +28,7 @@ struct EmptyStatePanel: View {
 
             Spacer(minLength: 0)
         }
-        .padding(14)
+        .padding(Theme.Spacing.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .surfaceCard()
     }

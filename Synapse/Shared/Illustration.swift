@@ -15,7 +15,7 @@ struct Illustration: View {
             .font(.system(size: size, weight: .semibold, design: .rounded))
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(Theme.accent.opacity(style == .playful ? 0.55 : 0.35))
-            .padding(12)
+            .padding(Theme.Spacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Theme.accent.opacity(style == .playful ? 0.10 : 0.06))

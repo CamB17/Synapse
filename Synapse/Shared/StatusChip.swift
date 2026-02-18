@@ -13,19 +13,19 @@ struct StatusChip: View {
     var uppercased = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Theme.Spacing.compact) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Theme.Typography.chipLabel)
             }
 
             Text(uppercased ? text.uppercased() : text)
                 .font(Theme.Typography.chipLabel)
-                .tracking(0.7)
+                .tracking(Theme.Typography.chipTracking)
         }
         .foregroundStyle(foreground)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
+        .padding(.horizontal, Theme.Spacing.chipX)
+        .padding(.vertical, Theme.Spacing.chipY)
         .background(
             Capsule(style: .continuous)
                 .fill(background)

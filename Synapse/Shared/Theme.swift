@@ -52,20 +52,45 @@ enum Theme {
     static let shadowY: CGFloat = 6
 
     enum Spacing {
+        static let xxxs: CGFloat = 2
         static let xxs: CGFloat = 4
+        static let compact: CGFloat = 6
         static let xs: CGFloat = 8
         static let sm: CGFloat = 12
+        static let cardInset: CGFloat = 14
         static let md: CGFloat = 16
+        static let lg: CGFloat = 24
+        static let chipX: CGFloat = 9
+        static let chipY: CGFloat = 5
+        static let hairline: CGFloat = 1
     }
 
     enum Typography {
         static let titleLarge = Font.system(size: 22, weight: .semibold, design: .rounded)
+        static let titleMedium = Font.system(size: 20, weight: .semibold, design: .rounded)
+        static let timerDisplay = Font.system(size: 52, weight: .semibold, design: .rounded)
+        static let heroValue = Font.system(size: 40, weight: .semibold, design: .rounded)
+        static let heroDenominator = Font.system(size: 20, weight: .semibold, design: .rounded)
         static let sectionLabel = Font.system(size: 12, weight: .semibold, design: .rounded)
         static let sectionTracking: CGFloat = 0.3
         static let chipLabel = Font.system(size: 11, weight: .semibold, design: .rounded)
+        static let iconSmall = Font.system(size: 12, weight: .semibold, design: .rounded)
+        static let iconMedium = Font.system(size: 14, weight: .semibold, design: .rounded)
+        static let iconCompact = Font.system(size: 16, weight: .semibold, design: .rounded)
+        static let iconCard = Font.system(size: 18, weight: .semibold, design: .rounded)
+        static let iconLarge = Font.system(size: 20, weight: .semibold, design: .rounded)
+        static let iconXL = Font.system(size: 22, weight: .semibold, design: .rounded)
         static let itemTitle = Font.system(size: 15, weight: .semibold, design: .rounded)
+        static let itemTitleCompact = Font.system(size: 16, weight: .semibold, design: .rounded)
+        static let itemTitleProminent = Font.system(size: 17, weight: .semibold, design: .rounded)
+        static let tileValue = Font.system(size: 19, weight: .semibold, design: .rounded)
         static let bodyMedium = Font.system(size: 15, weight: .medium, design: .rounded)
         static let bodySmall = Font.system(size: 13, weight: .medium, design: .rounded)
+        static let bodySmallStrong = Font.system(size: 14, weight: .semibold, design: .rounded)
+        static let labelSmallStrong = Font.system(size: 13, weight: .semibold, design: .rounded)
+        static let caption = Font.system(size: 12, weight: .medium, design: .rounded)
+        static let panelTitle = Font.system(size: 18, weight: .semibold, design: .rounded)
         static let statValue = Font.system(size: 22, weight: .semibold, design: .rounded)
+        static let chipTracking: CGFloat = 0.7
     }
 }
