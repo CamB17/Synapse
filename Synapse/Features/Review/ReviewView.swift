@@ -175,7 +175,7 @@ struct ReviewView: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
-            .frame(height: 140)
+            .frame(height: 152)
 
             if let bestDay {
                 Text("Peak: \(weekday(bestDay.date))")
@@ -185,7 +185,16 @@ struct ReviewView: View {
             }
         }
         .padding(Theme.Spacing.cardInset)
+        .background(
+            Theme.focusGradient.opacity(0.2),
+            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                .stroke(Theme.accent.opacity(0.14), lineWidth: 1)
+        }
         .surfaceCard()
+        .shadow(color: Theme.cardShadow().opacity(0.85), radius: 14, y: 8)
     }
 
     private var kpiGrid: some View {
@@ -214,7 +223,7 @@ struct ReviewView: View {
         }
         .padding(Theme.Spacing.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surfaceCard(cornerRadius: Theme.radiusSmall)
+        .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
     }
 
     private var highlightsCard: some View {

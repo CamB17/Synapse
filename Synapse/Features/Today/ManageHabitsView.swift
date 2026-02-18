@@ -12,6 +12,9 @@ struct ManageHabitsView: View {
     private var habits: [Habit]
 
     @State private var text: String = ""
+    @State private var editingHabitID: UUID?
+    @State private var editingTitle: String = ""
+    @FocusState private var isEditTitleFocused: Bool
     
     private var activeHabits: [Habit] {
         habits.filter(\.isActive)
@@ -60,10 +63,19 @@ struct ManageHabitsView: View {
                             VStack(spacing: 0) {
                                 ForEach(Array(activeHabits.enumerated()), id: \.element.id) { index, habit in
                                     HStack(spacing: Theme.Spacing.sm) {
-                                        Text(habit.title)
-                                            .font(Theme.Typography.itemTitle)
-                                            .foregroundStyle(Theme.text)
-                                            .lineLimit(1)
+                                        if editingHabitID == habit.id {
+                                            TextField("Habit name", text: $editingTitle)
+                                                .font(Theme.Typography.itemTitle)
+                                                .foregroundStyle(Theme.text)
+                                                .submitLabel(.done)
+                                                .focused($isEditTitleFocused)
+                                                .onSubmit { commitEdit(for: habit) }
+                                        } else {
+                                            Text(habit.title)
+                                                .font(Theme.Typography.itemTitle)
+                                                .foregroundStyle(Theme.text)
+                                                .lineLimit(1)
+                                        }
 
                                         Spacer(minLength: Theme.Spacing.xs)
 
@@ -72,15 +84,47 @@ struct ManageHabitsView: View {
                                             .foregroundStyle(Theme.textSecondary)
                                             .monospacedDigit()
 
-                                        Button {
-                                            delete(habit)
-                                        } label: {
-                                            Image(systemName: "minus.circle.fill")
-                                                .font(Theme.Typography.iconCard)
-                                                .foregroundStyle(Theme.textSecondary)
+                                        if editingHabitID == habit.id {
+                                            Button {
+                                                cancelEdit()
+                                            } label: {
+                                                Image(systemName: "xmark.circle")
+                                                    .font(Theme.Typography.iconCard)
+                                                    .foregroundStyle(Theme.textSecondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .accessibilityLabel("Cancel editing \(habit.title)")
+
+                                            Button {
+                                                commitEdit(for: habit)
+                                            } label: {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .font(Theme.Typography.iconCard)
+                                                    .foregroundStyle(Theme.accent)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .accessibilityLabel("Save \(habit.title)")
+                                        } else {
+                                            Button {
+                                                beginEdit(for: habit)
+                                            } label: {
+                                                Image(systemName: "pencil.circle")
+                                                    .font(Theme.Typography.iconCard)
+                                                    .foregroundStyle(Theme.textSecondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .accessibilityLabel("Edit \(habit.title)")
+
+                                            Button {
+                                                delete(habit)
+                                            } label: {
+                                                Image(systemName: "minus.circle.fill")
+                                                    .font(Theme.Typography.iconCard)
+                                                    .foregroundStyle(Theme.textSecondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .accessibilityLabel("Remove \(habit.title)")
                                         }
-                                        .buttonStyle(.plain)
-                                        .accessibilityLabel("Remove \(habit.title)")
                                     }
                                     .padding(.horizontal, Theme.Spacing.cardInset)
                                     .padding(.vertical, Theme.Spacing.sm)
@@ -101,6 +145,9 @@ struct ManageHabitsView: View {
             }
             .navigationTitle(title)
             .toolbarColorScheme(.light, for: .navigationBar)
+            .onChange(of: editingHabitID) { _, newValue in
+                isEditTitleFocused = newValue != nil
+            }
             .toolbar {
                 if showsDoneButton {
                     ToolbarItem(placement: .cancellationAction) {
@@ -121,6 +168,31 @@ struct ManageHabitsView: View {
             try modelContext.save()
         } catch {
             print("Habit save failed: \(error)")
+        }
+    }
+
+    private func beginEdit(for habit: Habit) {
+        editingHabitID = habit.id
+        editingTitle = habit.title
+    }
+
+    private func cancelEdit() {
+        editingHabitID = nil
+        editingTitle = ""
+    }
+
+    private func commitEdit(for habit: Habit) {
+        let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            cancelEdit()
+            return
+        }
+        habit.title = trimmed
+        cancelEdit()
+        do {
+            try modelContext.save()
+        } catch {
+            print("Habit edit failed: \(error)")
         }
     }
 
