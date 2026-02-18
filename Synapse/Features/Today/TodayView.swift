@@ -16,6 +16,9 @@ struct TodayView: View {
            sort: [SortDescriptor(\TaskItem.completedAt, order: .reverse)])
     private var completedTasks: [TaskItem]
 
+    @Query(sort: [SortDescriptor(\Habit.createdAt, order: .forward)])
+    private var habits: [Habit]
+
     @Query(sort: [SortDescriptor(\FocusSession.startedAt, order: .reverse)])
     private var sessions: [FocusSession]
 
@@ -37,6 +40,12 @@ struct TodayView: View {
     private var completedTodayCount: Int {
         let start = Calendar.current.startOfDay(for: .now)
         return completedTasks.filter { ($0.completedAt ?? .distantPast) >= start }.count
+    }
+    private var activeHabits: [Habit] {
+        habits.filter(\.isActive)
+    }
+    private var completedHabitsTodayCount: Int {
+        activeHabits.filter(\.completedToday).count
     }
     private var todayCompleted: [TaskItem] {
         let start = Calendar.current.startOfDay(for: .now)
@@ -81,6 +90,17 @@ struct TodayView: View {
             return "Small wins stack."
         }
         return "Start small, stay steady."
+    }
+
+    private var mascotExpression: BrainMascot.Expression {
+        let taskWorkload = todayTasks.count + completedTodayCount
+        let habitWorkload = activeHabits.count
+        let totalWorkload = max(1, taskWorkload + habitWorkload)
+        let completedWorkload = completedTodayCount + completedHabitsTodayCount
+        let completionRatio = Double(completedWorkload) / Double(totalWorkload)
+        if completionRatio >= 0.65 { return .proud }
+        if completionRatio > 0.45 { return .balanced }
+        return .neutral
     }
 
     var body: some View {
@@ -137,7 +157,12 @@ struct TodayView: View {
             )
         }
         .sheet(isPresented: $showingCompletedReview) {
-            CompletedTodaySheet(tasks: todayCompleted)
+            CompletedTodaySheet(
+                tasks: todayCompleted,
+                onDelete: { task in
+                    deleteCompletedTask(task)
+                }
+            )
         }
         .animation(.snappy(duration: 0.22), value: focusTask)
         .animation(.snappy(duration: 0.18), value: showingCaptureToast)
@@ -175,36 +200,49 @@ struct TodayView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("\(completedTodayCount)")
-                    .font(Theme.Typography.heroValue)
-                    .contentTransition(.numericText())
+            HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("\(completedTodayCount)")
+                            .font(Theme.Typography.heroValue)
+                            .contentTransition(.numericText())
 
-                Text("/ \(headerDenominator)")
-                    .font(Theme.Typography.heroDenominator)
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            
-            ZStack(alignment: .topTrailing) {
-                StatusChip(text: headerMicroLine, tone: .accent, uppercased: true)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                    .animation(.snappy(duration: 0.2), value: headerMicroLine)
+                        Text("/ \(headerDenominator)")
+                            .font(Theme.Typography.heroDenominator)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
 
-                if showingTaskCompleteSparkle {
-                    SparkleOverlay()
-                        .offset(x: Theme.Spacing.xxs, y: -Theme.Spacing.xxs)
+                    ZStack(alignment: .topTrailing) {
+                        StatusChip(text: headerMicroLine, tone: .accent, uppercased: true)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                            .animation(.snappy(duration: 0.2), value: headerMicroLine)
+
+                        if showingTaskCompleteSparkle {
+                            SparkleOverlay()
+                                .offset(x: Theme.Spacing.xxs, y: -Theme.Spacing.xxs)
+                        }
+                    }
+
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xxs) {
+                        Text("\(formatMinutes(focusSecondsToday))")
+                            .font(Theme.Typography.bodyMedium)
+                            .foregroundStyle(Theme.textSecondary)
+                            .contentTransition(.numericText())
+
+                        Text("focused")
+                            .font(Theme.Typography.bodyMedium)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
                 }
-            }
 
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xxs) {
-                Text("\(formatMinutes(focusSecondsToday))")
-                    .font(Theme.Typography.bodyMedium)
-                    .foregroundStyle(Theme.textSecondary)
-                    .contentTransition(.numericText())
+                Spacer(minLength: 0)
 
-                Text("focused")
-                    .font(Theme.Typography.bodyMedium)
-                    .foregroundStyle(Theme.textSecondary)
+                BrainMascot(
+                    expression: mascotExpression,
+                    size: 112
+                )
+                .padding(.top, Theme.Spacing.xxxs)
+                .animation(.snappy(duration: 0.22), value: mascotExpression)
             }
             
             Capsule()
@@ -333,6 +371,13 @@ struct TodayView: View {
         triggerTaskCompleteSparkle()
     }
 
+    private func deleteCompletedTask(_ task: TaskItem) {
+        withAnimation(.snappy(duration: 0.18)) {
+            modelContext.delete(task)
+        }
+        try? modelContext.save()
+    }
+
     private func formatMinutes(_ seconds: Int) -> String {
         let mins = max(0, seconds) / 60
         if mins < 60 { return "\(mins) min" }
@@ -454,6 +499,7 @@ struct TodayView: View {
 private struct CompletedTodaySheet: View {
     @Environment(\.dismiss) private var dismiss
     let tasks: [TaskItem]
+    let onDelete: (TaskItem) -> Void
     private let calendar = Calendar.current
 
     private enum TimeBlock: Int, CaseIterable {
@@ -523,6 +569,13 @@ private struct CompletedTodaySheet: View {
                                     }
                                     .padding(.vertical, 2)
                                     .listRowBackground(Theme.surface)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) {
+                                            onDelete(task)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                                 }
                             } header: {
                                 Text(group.block.title)
