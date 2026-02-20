@@ -1,6 +1,13 @@
 import SwiftUI
 import SwiftData
 
+struct HabitCompletionSnapshot {
+    let completedBefore: Int
+    let completedAfter: Int
+    let activeCount: Int
+    let didComplete: Bool
+}
+
 struct HabitBlock: View {
     @Environment(\.modelContext) private var modelContext
 
@@ -10,6 +17,7 @@ struct HabitBlock: View {
     @State private var showingManage = false
     @State private var pulseId: UUID?
     @State private var sparkleId: UUID?
+    var onCompletionStateChange: ((HabitCompletionSnapshot) -> Void)? = nil
 
     private var activeHabits: [Habit] {
         habits.filter(\.isActive)
@@ -145,6 +153,11 @@ struct HabitBlock: View {
 
     private func toggle(_ habit: Habit) {
         let wasCompleted = habit.completedToday
+        let activeCount = activeHabits.count
+        let completedBefore = activeHabits.filter(\.completedToday).count
+        let completedAfter = wasCompleted
+            ? max(0, completedBefore - 1)
+            : min(activeCount, completedBefore + 1)
         let haptic = UIImpactFeedbackGenerator(style: wasCompleted ? .soft : .light)
         haptic.impactOccurred()
 
@@ -164,6 +177,15 @@ struct HabitBlock: View {
         } catch {
             print("Habit save failed: \(error)")
         }
+
+        onCompletionStateChange?(
+            HabitCompletionSnapshot(
+                completedBefore: completedBefore,
+                completedAfter: completedAfter,
+                activeCount: activeCount,
+                didComplete: !wasCompleted
+            )
+        )
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             if pulseId == habit.id { pulseId = nil }

@@ -16,6 +16,9 @@ struct TodayView: View {
            sort: [SortDescriptor(\TaskItem.completedAt, order: .reverse)])
     private var completedTasks: [TaskItem]
 
+    @Query(sort: [SortDescriptor(\Habit.createdAt, order: .forward)])
+    private var habits: [Habit]
+
     @Query(sort: [SortDescriptor(\FocusSession.startedAt, order: .reverse)])
     private var sessions: [FocusSession]
 
@@ -27,9 +30,10 @@ struct TodayView: View {
     @State private var focusLogMessage = ""
     @State private var showingFocusLogToast = false
     @State private var focusLogDismissWorkItem: DispatchWorkItem?
-    @State private var pulsing = false
     @State private var showingCompletedReview = false
-    @State private var showingTaskCompleteSparkle = false
+    @State private var momentumTriggeredDay: Date?
+    @State private var milestoneTriggeredDay: Date?
+    @StateObject private var brainReactor = BrainReactionController()
 
     private var todayCap: Int { 5 }
     private var remainingCount: Int { todayTasks.count }
@@ -38,12 +42,17 @@ struct TodayView: View {
         let start = Calendar.current.startOfDay(for: .now)
         return completedTasks.filter { ($0.completedAt ?? .distantPast) >= start }.count
     }
+    private var activeHabits: [Habit] {
+        habits.filter(\.isActive)
+    }
+    private var completedHabitsTodayCount: Int {
+        activeHabits.filter(\.completedToday).count
+    }
     private var todayCompleted: [TaskItem] {
         let start = Calendar.current.startOfDay(for: .now)
         return completedTasks.filter { ($0.completedAt ?? .distantPast) >= start }
     }
 
-    // If you want header to be “X / 5 Cleared” regardless of how many you planned, keep it fixed at 5.
     private var headerDenominator: Int { todayCap }
 
     private var focusSecondsToday: Int {
@@ -57,6 +66,10 @@ struct TodayView: View {
         guard headerDenominator > 0 else { return 0 }
         return min(1, CGFloat(completedTodayCount) / CGFloat(headerDenominator))
     }
+
+    private var executionRatioPercent: Int {
+        Int((headerProgress * 100).rounded())
+    }
     
     private var headerMicroLine: String {
         if completedTodayCount >= todayCap {
@@ -67,20 +80,26 @@ struct TodayView: View {
         return "Start small."
     }
     
-    private var dailyInsightLine: String {
-        if completedTodayCount >= todayCap {
-            return "Clean execution today."
-        }
-        if focusSecondsToday >= 60 * 60 {
-            return "You protected your focus."
-        }
-        if completedTodayCount >= 3 {
-            return "Consistency compounds."
-        }
-        if completedTodayCount > 0 {
-            return "Small wins stack."
-        }
-        return "Start small, stay steady."
+    private var mascotExpression: BrainMascot.Expression {
+        let taskWorkload = todayTasks.count + completedTodayCount
+        let habitWorkload = activeHabits.count
+        let totalWorkload = max(1, taskWorkload + habitWorkload)
+        let completedWorkload = completedTodayCount + completedHabitsTodayCount
+        let completionRatio = Double(completedWorkload) / Double(totalWorkload)
+        if completionRatio >= 0.65 { return .proud }
+        if completionRatio > 0.45 { return .balanced }
+        return .neutral
+    }
+
+    private enum CompletionSource {
+        case task
+        case habit
+    }
+
+    private struct ExecutionSnapshot {
+        let completedTaskCount: Int
+        let completedHabitCount: Int
+        let activeHabitCount: Int
     }
 
     var body: some View {
@@ -137,7 +156,12 @@ struct TodayView: View {
             )
         }
         .sheet(isPresented: $showingCompletedReview) {
-            CompletedTodaySheet(tasks: todayCompleted)
+            CompletedTodaySheet(
+                tasks: todayCompleted,
+                onDelete: { task in
+                    deleteCompletedTask(task)
+                }
+            )
         }
         .animation(.snappy(duration: 0.22), value: focusTask)
         .animation(.snappy(duration: 0.18), value: showingCaptureToast)
@@ -154,18 +178,17 @@ struct TodayView: View {
 
     private var mainContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 header
-                HabitBlock()
+                HabitBlock(onCompletionStateChange: handleHabitCompletionStateChange)
 
                 if isDayClear {
                     dayClearState
                 } else {
                     remainingSection
                 }
-                
+
                 performanceTile
-                dailyInsightTile
             }
             .padding(Theme.Spacing.md)
         }
@@ -174,56 +197,67 @@ struct TodayView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("\(completedTodayCount)")
-                    .font(Theme.Typography.heroValue)
-                    .contentTransition(.numericText())
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(alignment: .top, spacing: Theme.Spacing.md) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+                    Text("\(executionRatioPercent)%")
+                        .font(Theme.Typography.heroValue)
+                        .foregroundStyle(Theme.text)
+                        .contentTransition(.numericText())
 
-                Text("/ \(headerDenominator)")
-                    .font(Theme.Typography.heroDenominator)
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            
-            ZStack(alignment: .topTrailing) {
-                StatusChip(text: headerMicroLine, tone: .accent, uppercased: true)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                    .animation(.snappy(duration: 0.2), value: headerMicroLine)
+                    Text("Execution Ratio")
+                        .font(Theme.Typography.sectionLabel)
+                        .tracking(Theme.Typography.sectionTracking)
+                        .foregroundStyle(Theme.textSecondary)
 
-                if showingTaskCompleteSparkle {
-                    SparkleOverlay()
-                        .offset(x: Theme.Spacing.xxs, y: -Theme.Spacing.xxs)
+                    Text("\(completedTodayCount) / \(headerDenominator) completions")
+                        .font(Theme.Typography.bodySmall)
+                        .foregroundStyle(Theme.textSecondary)
+                        .contentTransition(.numericText())
                 }
+
+                Spacer(minLength: 0)
+
+                BrainMascotView(
+                    imageName: BrainMascot.imageName(for: mascotExpression),
+                    reactor: brainReactor,
+                    size: 112
+                )
+                .padding(.top, Theme.Spacing.xxxs)
+                .animation(.snappy(duration: 0.22), value: mascotExpression)
             }
+
+            StatusChip(text: headerMicroLine, tone: .accent, uppercased: true)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                .animation(.snappy(duration: 0.2), value: headerMicroLine)
 
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xxs) {
+                Image(systemName: "timer")
+                    .font(Theme.Typography.iconSmall)
+                    .foregroundStyle(Theme.textSecondary.opacity(0.9))
                 Text("\(formatMinutes(focusSecondsToday))")
-                    .font(Theme.Typography.bodyMedium)
+                    .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
                     .contentTransition(.numericText())
-
-                Text("focused")
-                    .font(Theme.Typography.bodyMedium)
+                Text("focus")
+                    .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
             }
-            
+
             Capsule()
                 .fill(Theme.accent.opacity(0.12))
-                .frame(height: 7)
+                .frame(height: 4)
                 .overlay(alignment: .leading) {
                     GeometryReader { proxy in
                         Capsule()
                             .fill(Theme.accent)
-                            .frame(width: max(8, proxy.size.width * headerProgress), height: 7)
+                            .frame(width: max(6, proxy.size.width * headerProgress), height: 4)
                     }
                 }
                 .clipShape(Capsule())
                 .animation(.snappy(duration: 0.22), value: headerProgress)
-
-            Divider().padding(.top, 6)
         }
-        .scaleEffect(pulsing ? 1.01 : 1.0)
-        .animation(.snappy(duration: 0.18), value: pulsing)
+        .padding(.bottom, Theme.Spacing.xs)
         .animation(.snappy(duration: 0.18), value: todayTasks.count)
         .animation(.snappy(duration: 0.18), value: completedTodayCount)
         .animation(.snappy(duration: 0.18), value: focusSecondsToday)
@@ -241,12 +275,12 @@ struct TodayView: View {
     }
 
     private var remainingSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             SectionLabel(icon: "circle.dashed", title: "Commitments (\(remainingCount))")
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.18), value: remainingCount)
 
-            VStack(spacing: Theme.Spacing.xs) {
+            VStack(spacing: Theme.Spacing.sm) {
                 ForEach(todayTasks) { task in
                     SwipeCompleteRow(
                         onComplete: { complete(task) },
@@ -278,13 +312,13 @@ struct TodayView: View {
                         Image(systemName: "checkmark.seal")
                             .font(Theme.Typography.caption.weight(.semibold))
                             .foregroundStyle(Theme.accent.opacity(0.55))
-                        Text("Completed Today")
+                        Text("Execution Log")
                             .font(Theme.Typography.sectionLabel)
                             .tracking(Theme.Typography.sectionTracking)
                             .foregroundStyle(Theme.textSecondary)
                     }
 
-                    Text("\(completedTodayCount) \(completedTodayCount == 1 ? "action" : "actions")")
+                    Text("\(completedTodayCount) \(completedTodayCount == 1 ? "completion" : "completions")")
                         .font(Theme.Typography.tileValue)
                         .foregroundStyle(Theme.text)
                         .contentTransition(.numericText())
@@ -306,21 +340,15 @@ struct TodayView: View {
         .buttonStyle(.plain)
     }
     
-    private var dailyInsightTile: some View {
-        HStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: "sparkles")
-                .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.accent.opacity(0.5))
-            Text(dailyInsightLine)
-                .font(Theme.Typography.bodySmall)
-                .foregroundStyle(Theme.textSecondary)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 2)
-        .padding(.top, 2)
-    }
-
     private func complete(_ task: TaskItem) {
+        guard task.state == .today else { return }
+        let previousState = executionSnapshot()
+        let nextState = ExecutionSnapshot(
+            completedTaskCount: previousState.completedTaskCount + 1,
+            completedHabitCount: previousState.completedHabitCount,
+            activeHabitCount: previousState.activeHabitCount
+        )
+
         let haptic = UIImpactFeedbackGenerator(style: .light)
         haptic.impactOccurred()
 
@@ -329,8 +357,14 @@ struct TodayView: View {
             task.completedAt = .now
         }
         try? modelContext.save()
-        pulseHeader()
-        triggerTaskCompleteSparkle()
+        triggerBrainReactions(from: previousState, to: nextState, source: .task)
+    }
+
+    private func deleteCompletedTask(_ task: TaskItem) {
+        withAnimation(.snappy(duration: 0.18)) {
+            modelContext.delete(task)
+        }
+        try? modelContext.save()
     }
 
     private func formatMinutes(_ seconds: Int) -> String {
@@ -414,7 +448,6 @@ struct TodayView: View {
     private func showFocusLogToast(minutes: Int) {
         focusLogDismissWorkItem?.cancel()
         focusLogMessage = "Logged \(minutes) min"
-        pulseHeader()
 
         withAnimation(.snappy(duration: 0.18)) {
             showingFocusLogToast = true
@@ -429,24 +462,63 @@ struct TodayView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: workItem)
     }
 
-    private func pulseHeader() {
-        withAnimation(.snappy(duration: 0.2)) {
-            pulsing = true
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            withAnimation(.snappy(duration: 0.18)) {
-                pulsing = false
-            }
-        }
+    private func handleHabitCompletionStateChange(_ snapshot: HabitCompletionSnapshot) {
+        guard snapshot.didComplete else { return }
+        let previousState = ExecutionSnapshot(
+            completedTaskCount: completedTodayCount,
+            completedHabitCount: snapshot.completedBefore,
+            activeHabitCount: snapshot.activeCount
+        )
+        let nextState = ExecutionSnapshot(
+            completedTaskCount: completedTodayCount,
+            completedHabitCount: snapshot.completedAfter,
+            activeHabitCount: snapshot.activeCount
+        )
+        triggerBrainReactions(from: previousState, to: nextState, source: .habit)
     }
 
-    private func triggerTaskCompleteSparkle() {
-        showingTaskCompleteSparkle = false
-        showingTaskCompleteSparkle = true
+    private func executionSnapshot() -> ExecutionSnapshot {
+        ExecutionSnapshot(
+            completedTaskCount: completedTodayCount,
+            completedHabitCount: completedHabitsTodayCount,
+            activeHabitCount: activeHabits.count
+        )
+    }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            showingTaskCompleteSparkle = false
+    private func triggerBrainReactions(
+        from previous: ExecutionSnapshot,
+        to current: ExecutionSnapshot,
+        source: CompletionSource
+    ) {
+        let todayStart = Calendar.current.startOfDay(for: .now)
+        if let trackedMomentumDay = momentumTriggeredDay,
+           !Calendar.current.isDate(trackedMomentumDay, inSameDayAs: todayStart) {
+            momentumTriggeredDay = nil
+        }
+        if let trackedMilestoneDay = milestoneTriggeredDay,
+           !Calendar.current.isDate(trackedMilestoneDay, inSameDayAs: todayStart) {
+            milestoneTriggeredDay = nil
+        }
+
+        switch source {
+        case .task:
+            brainReactor.trigger(.micro)
+        case .habit:
+            brainReactor.trigger(.micro)
+        }
+
+        let crossedAllRituals = previous.activeHabitCount > 0 &&
+            previous.completedHabitCount < previous.activeHabitCount &&
+            current.completedHabitCount >= current.activeHabitCount
+        if crossedAllRituals && momentumTriggeredDay == nil {
+            momentumTriggeredDay = todayStart
+            brainReactor.trigger(.momentum)
+        }
+
+        let reachedCap = previous.completedTaskCount < todayCap && current.completedTaskCount >= todayCap
+        if reachedCap && milestoneTriggeredDay == nil {
+            milestoneTriggeredDay = todayStart
+            brainReactor.trigger(.milestone)
         }
     }
 }
@@ -454,6 +526,7 @@ struct TodayView: View {
 private struct CompletedTodaySheet: View {
     @Environment(\.dismiss) private var dismiss
     let tasks: [TaskItem]
+    let onDelete: (TaskItem) -> Void
     private let calendar = Calendar.current
 
     private enum TimeBlock: Int, CaseIterable {
@@ -523,6 +596,13 @@ private struct CompletedTodaySheet: View {
                                     }
                                     .padding(.vertical, 2)
                                     .listRowBackground(Theme.surface)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) {
+                                            onDelete(task)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                                 }
                             } header: {
                                 Text(group.block.title)
@@ -537,7 +617,7 @@ private struct CompletedTodaySheet: View {
                 }
             }
             .background(Theme.canvas)
-            .navigationTitle("Completed Today")
+            .navigationTitle("Execution Log")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
