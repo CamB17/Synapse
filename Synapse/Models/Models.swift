@@ -9,12 +9,12 @@ enum TaskState: String, Codable, CaseIterable {
 
 @Model
 final class TaskItem {
-    var id: UUID
-    var title: String
-    var stateRaw: String
-    var createdAt: Date
+    var id: UUID = UUID()
+    var title: String = ""
+    var stateRaw: String = TaskState.inbox.rawValue
+    var createdAt: Date = Date()
     var completedAt: Date?
-    var focusSeconds: Int
+    var focusSeconds: Int = 0
 
     init(title: String, state: TaskState = .inbox, createdAt: Date = .now) {
         self.id = UUID()
@@ -33,11 +33,11 @@ final class TaskItem {
 
 @Model
 final class FocusSession {
-    var id: UUID
-    var taskId: UUID
-    var startedAt: Date
+    var id: UUID = UUID()
+    var taskId: UUID = UUID()
+    var startedAt: Date = Date()
     var endedAt: Date?
-    var durationSeconds: Int
+    var durationSeconds: Int = 0
 
     init(taskId: UUID, startedAt: Date = .now) {
         self.id = UUID()
