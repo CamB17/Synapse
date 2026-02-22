@@ -3,14 +3,14 @@ import SwiftData
 
 @Model
 final class Habit {
-    var id: UUID
-    var title: String
-    var createdAt: Date
+    var id: UUID = UUID()
+    var title: String = ""
+    var createdAt: Date = Date()
     @Attribute(originalName: "lastCompletedAt")
     var lastCompletedDate: Date?
     @Attribute(originalName: "streakCount")
-    var currentStreak: Int
-    var isActive: Bool
+    var currentStreak: Int = 0
+    var isActive: Bool = true
 
     init(title: String) {
         self.id = UUID()
