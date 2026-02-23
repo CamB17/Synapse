@@ -15,8 +15,10 @@ struct InboxView: View {
     private var todayTasks: [TaskItem]
 
     @State private var text: String = ""
+    @State private var voiceSeedText = ""
     @State private var showCapAlert = false
     @State private var committingTaskIDs: Set<UUID> = []
+    @StateObject private var voiceCapture = VoiceCaptureController()
 
     private let todayCap = 5
 
@@ -83,26 +85,47 @@ struct InboxView: View {
             } message: {
                 Text("Clear something first (max \(todayCap)).")
             }
+            .onDisappear {
+                voiceCapture.stop()
+            }
         }
     }
 
     private var captureRow: some View {
-        HStack(spacing: Theme.Spacing.xs) {
-            TextField("Capture something…", text: $text)
-                .font(Theme.Typography.bodyMedium)
-                .foregroundStyle(Theme.text)
-                .submitLabel(.done)
-                .onSubmit(add)
-                .padding(.horizontal, Theme.Spacing.sm)
-                .padding(.vertical, 10)
-                .surfaceCard(cornerRadius: Theme.radiusSmall)
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+            HStack(spacing: Theme.Spacing.xs) {
+                TextField("Capture something…", text: $text)
+                    .font(Theme.Typography.bodyMedium)
+                    .foregroundStyle(Theme.text)
+                    .submitLabel(.done)
+                    .onSubmit(add)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, 10)
+                    .surfaceCard(cornerRadius: Theme.radiusSmall)
 
-            Button(action: add) {
-                Image(systemName: "plus.circle.fill")
-                    .font(Theme.Typography.iconXL)
-                    .foregroundStyle(Theme.accent)
+                Button {
+                    toggleVoiceCapture()
+                } label: {
+                    Image(systemName: voiceCapture.isRecording ? "waveform.circle.fill" : "mic.circle.fill")
+                        .font(Theme.Typography.iconXL)
+                        .foregroundStyle(voiceCapture.isRecording ? Theme.accent2 : Theme.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(voiceCapture.isRecording ? "Stop voice capture" : "Start voice capture")
+
+                Button(action: add) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(Theme.Typography.iconXL)
+                        .foregroundStyle(Theme.accent)
+                }
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            if let error = voiceCapture.errorMessage {
+                Text(error)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.textSecondary)
+            }
         }
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.top, Theme.Spacing.xs)
@@ -117,11 +140,27 @@ struct InboxView: View {
     }
 
     private func add() {
+        voiceCapture.stop()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         modelContext.insert(TaskItem(title: trimmed, state: .inbox))
         text = ""
         try? modelContext.save()
+    }
+
+    private func toggleVoiceCapture() {
+        voiceSeedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        voiceCapture.toggle { spoken in
+            text = mergedText(base: voiceSeedText, spoken: spoken)
+        }
+    }
+
+    private func mergedText(base: String, spoken: String) -> String {
+        let cleanedBase = base.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedSpoken = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedSpoken.isEmpty else { return cleanedBase }
+        guard !cleanedBase.isEmpty else { return cleanedSpoken }
+        return "\(cleanedBase) \(cleanedSpoken)"
     }
 
     private func commitToToday(_ item: TaskItem) {
