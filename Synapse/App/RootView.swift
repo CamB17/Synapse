@@ -5,6 +5,7 @@ struct RootView: View {
     @Namespace private var taskNamespace
     @State private var selectedTab: Tab = .today
     @State private var captureRequestID = 0
+    @State private var hideTabBar = false
 
     private enum Tab: Hashable {
         case today
@@ -17,7 +18,8 @@ struct RootView: View {
         ZStack {
             TodayView(
                 taskNamespace: taskNamespace,
-                externalCaptureRequestID: $captureRequestID
+                externalCaptureRequestID: $captureRequestID,
+                hideBottomNavigation: $hideTabBar
             )
             .opacity(selectedTab == .today ? 1 : 0)
             .allowsHitTesting(selectedTab == .today)
@@ -42,8 +44,12 @@ struct RootView: View {
                 .allowsHitTesting(selectedTab == .review)
         }
         .animation(.snappy(duration: 0.18), value: selectedTab)
+        .animation(.snappy(duration: 0.2), value: hideTabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            customTabBar
+            if !hideTabBar {
+                customTabBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
     }
 

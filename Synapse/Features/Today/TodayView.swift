@@ -1,10 +1,12 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import Combine
 
 struct TodayView: View {
     let taskNamespace: Namespace.ID
     @Binding var externalCaptureRequestID: Int
+    @Binding var hideBottomNavigation: Bool
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
@@ -30,9 +32,10 @@ struct TodayView: View {
     @State private var showingCapture = false
     @State private var isFocusMode = false
     @State private var showLaterTasks = false
-    @State private var focusTimeFilter: FocusTimeFilter = .all
+    @State private var focusTimeFilter: FocusTimeFilter = TodayView.initialFocusTimeFilter()
     @State private var selectedDate = Calendar.current.startOfDay(for: .now)
-    @State private var showingMonthMap = false
+    @State private var calendarMode: CalendarMode = .week
+    @State private var lastObservedPartOfDay: TaskPartOfDay = TodayView.partOfDay(at: .now)
 
     @State private var focusIsRunning = false
     @State private var focusElapsedSeconds = 0
@@ -44,19 +47,48 @@ struct TodayView: View {
     @State private var showingFocusToast = false
     @State private var focusToastWorkItem: DispatchWorkItem?
     @State private var daySyncAnchor = Calendar.current.startOfDay(for: .now)
+    private let partOfDayTicker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     private enum FocusTimeFilter: String, CaseIterable {
-        case all
         case morning
         case afternoon
         case evening
+        case all
 
         var label: String {
             switch self {
-            case .all: return "All"
             case .morning: return "Morning"
             case .afternoon: return "Afternoon"
             case .evening: return "Evening"
+            case .all: return "All"
+            }
+        }
+    }
+
+    private static func partOfDay(at date: Date, calendar: Calendar = .current) -> TaskPartOfDay {
+        let hour = calendar.component(.hour, from: date)
+        if hour < 12 { return .morning }
+        if hour < 17 { return .afternoon }
+        return .evening
+    }
+
+    private static func initialFocusTimeFilter() -> FocusTimeFilter {
+        switch partOfDay(at: .now) {
+        case .morning: return .morning
+        case .afternoon: return .afternoon
+        case .evening: return .evening
+        case .anytime: return .all
+        }
+    }
+
+    private enum CalendarMode: CaseIterable {
+        case week
+        case month
+
+        var label: String {
+            switch self {
+            case .week: return "Week"
+            case .month: return "Month"
             }
         }
     }
@@ -65,10 +97,8 @@ struct TodayView: View {
     private var calendar: Calendar { .current }
     private var todayStart: Date { calendar.startOfDay(for: .now) }
     private var selectedDayStart: Date { calendar.startOfDay(for: selectedDate) }
-    private var selectedDayLabel: String {
-        calendar.isDateInToday(selectedDayStart)
-            ? "Today"
-            : selectedDayStart.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    private var currentMonthLabel: String {
+        selectedDayStart.formatted(.dateTime.month(.abbreviated).year())
     }
     private var weekDays: [Date] {
         guard let interval = calendar.dateInterval(of: .weekOfYear, for: selectedDayStart) else { return [] }
@@ -175,6 +205,17 @@ struct TodayView: View {
         return "Momentum → 0 this week"
     }
 
+    private var momentumInsightLine: String? {
+        let streak = completionStreakEnding(at: selectedDayStart)
+        if streak > 3 {
+            return "Momentum building."
+        }
+        if calendar.isDateInToday(selectedDayStart), streak == 0, weeklyCompletedCount(offsetWeeks: 0) > 0 {
+            return "Reset today with one win."
+        }
+        return nil
+    }
+
     private var totalFocusSecondsSelectedDay: Int {
         let end = calendar.date(byAdding: .day, value: 1, to: selectedDayStart) ?? .distantFuture
         let logged = sessions
@@ -184,10 +225,7 @@ struct TodayView: View {
     }
 
     private var currentPartOfDay: TaskPartOfDay {
-        let hour = calendar.component(.hour, from: .now)
-        if hour < 12 { return .morning }
-        if hour < 17 { return .afternoon }
-        return .evening
+        Self.partOfDay(at: .now, calendar: calendar)
     }
 
     var body: some View {
@@ -198,11 +236,6 @@ struct TodayView: View {
                         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                             header
                             calendarRail
-
-                            if isFocusMode {
-                                focusTimerStrip
-                            }
-
                             ritualsSection
 
                             focusSection
@@ -211,8 +244,20 @@ struct TodayView: View {
                         }
                         .padding(Theme.Spacing.md)
                     }
+                    .opacity(isFocusMode ? 0.08 : 1)
+                    .blur(radius: isFocusMode ? 12 : 0)
+                    .scaleEffect(isFocusMode ? 0.985 : 1)
+                    .allowsHitTesting(!isFocusMode)
 
-                    floatingFocusButton
+                    if isFocusMode {
+                        immersiveFocusLayer
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+
+                    if !isFocusMode {
+                        floatingFocusButton
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
 
                     if showingFocusToast {
                         focusToast
@@ -225,6 +270,7 @@ struct TodayView: View {
             }
             .navigationTitle("Today")
             .toolbarColorScheme(.light, for: .navigationBar)
+            .toolbar(isFocusMode ? .hidden : .visible, for: .navigationBar)
             .sheet(isPresented: $showingCapture) {
                 QuickCaptureSheet(
                     placeholder: "Capture something…",
@@ -237,16 +283,25 @@ struct TodayView: View {
             }
             .onAppear {
                 synchronizeDayState()
+                synchronizeFocusFilterWithCurrentPartOfDay(force: true)
+                hideBottomNavigation = isFocusMode
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 synchronizeDayState()
+                synchronizeFocusFilterWithCurrentPartOfDay(force: true)
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
                 synchronizeDayState()
+                synchronizeFocusFilterWithCurrentPartOfDay(force: true)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
                 synchronizeDayState()
+                synchronizeFocusFilterWithCurrentPartOfDay(force: true)
+            }
+            .onReceive(partOfDayTicker) { _ in
+                guard scenePhase == .active else { return }
+                synchronizeFocusFilterWithCurrentPartOfDay()
             }
             .onChange(of: externalCaptureRequestID) { _, _ in
                 showingCapture = true
@@ -255,6 +310,10 @@ struct TodayView: View {
                 if isEnabled, focusActiveTaskID == nil {
                     focusActiveTaskID = highPriorityTasks.first?.id
                 }
+                if isEnabled, !focusIsRunning {
+                    startFocusTimer()
+                }
+                hideBottomNavigation = isEnabled
             }
             .onChange(of: selectedDayStart) { _, _ in
                 showLaterTasks = false
@@ -266,15 +325,16 @@ struct TodayView: View {
             .onDisappear {
                 focusTimer?.invalidate()
                 focusTimer = nil
+                hideBottomNavigation = false
             }
             .animation(.snappy(duration: 0.18), value: showingFocusToast)
-            .animation(.snappy(duration: 0.2), value: isFocusMode)
+            .animation(.easeInOut(duration: 0.32), value: isFocusMode)
             .animation(.snappy(duration: 0.18), value: showLaterTasks)
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Today")
                     .font(Theme.Typography.titleLarge)
@@ -287,16 +347,28 @@ struct TodayView: View {
                     haptic.impactOccurred()
                     toggleFocusMode()
                 } label: {
-                    Label(isFocusMode ? "Exit Focus" : "Focus", systemImage: isFocusMode ? "pause.circle.fill" : "timer.circle")
+                    Label(isFocusMode ? "Exit Focus" : "Focus", systemImage: isFocusMode ? "pause.fill" : "timer")
                         .font(Theme.Typography.bodySmallStrong)
                         .labelStyle(.titleAndIcon)
                         .foregroundStyle(isFocusMode ? Theme.accent2 : Theme.accent)
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.vertical, Theme.Spacing.xxs)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill((isFocusMode ? Theme.accent2 : Theme.accent).opacity(0.12))
+                        )
+                        .overlay {
+                            Capsule(style: .continuous)
+                                .stroke((isFocusMode ? Theme.accent2 : Theme.accent).opacity(0.26), lineWidth: 0.8)
+                        }
+                        .shadow(color: Theme.cardShadow().opacity(0.7), radius: 4, y: 2)
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.bottom, Theme.Spacing.xxxs)
 
             Text("\(completionPercent)%")
-                .font(Theme.Typography.tileValue)
+                .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundStyle(Theme.text)
                 .contentTransition(.numericText())
 
@@ -306,53 +378,87 @@ struct TodayView: View {
                 .contentTransition(.numericText())
 
             Text(momentumLine)
-                .font(Theme.Typography.bodySmallStrong)
-                .foregroundStyle(momentumDelta >= 0 ? Theme.success : Theme.accent2)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(Theme.textSecondary.opacity(0.78))
                 .contentTransition(.numericText())
 
-            Text("Consistency builds clarity.")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.textSecondary.opacity(0.86))
+            if let momentumInsightLine {
+                Text(momentumInsightLine)
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
+                    .foregroundStyle(Theme.textSecondary.opacity(0.72))
+            }
         }
-        .padding(Theme.Spacing.cardInset)
+        .padding(.horizontal, Theme.Spacing.cardInset)
+        .padding(.vertical, 10)
         .background(
             headerBackground,
             in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
         )
+        .shadow(color: Theme.cardShadow().opacity(0.85), radius: Theme.shadowRadius, y: Theme.shadowY)
     }
 
     private var calendarRail: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack(spacing: Theme.Spacing.xs) {
-                Text(selectedDayLabel)
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack {
+                Text(currentMonthLabel)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.textSecondary.opacity(0.9))
 
                 Spacer(minLength: 0)
-
-                Button {
-                    withAnimation(.snappy(duration: 0.24)) {
-                        showingMonthMap.toggle()
-                    }
-                } label: {
-                    Image(systemName: showingMonthMap ? "calendar.circle.fill" : "calendar.circle")
-                        .font(Theme.Typography.iconCard)
-                        .foregroundStyle(Theme.textSecondary.opacity(0.9))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(showingMonthMap ? "Collapse month" : "Expand month")
             }
 
-            weekStrip
+            calendarModeControl
 
-            if showingMonthMap {
+            if calendarMode == .week {
+                weekStrip
+            } else {
                 monthHeatmap
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(.opacity)
             }
         }
-        .animation(.snappy(duration: 0.24), value: showingMonthMap)
-        .contentShape(Rectangle())
-        .simultaneousGesture(monthToggleGesture)
+        .animation(.snappy(duration: 0.22), value: calendarMode)
+    }
+
+    private var calendarModeControl: some View {
+        HStack(spacing: Theme.Spacing.xxxs) {
+            ForEach(CalendarMode.allCases, id: \.self) { mode in
+                Button {
+                    guard calendarMode != mode else { return }
+                    withAnimation(.snappy(duration: 0.18)) {
+                        calendarMode = mode
+                    }
+                } label: {
+                    Text(mode.label)
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(calendarMode == mode ? Theme.text : Theme.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, Theme.Spacing.xs)
+                        .padding(.vertical, Theme.Spacing.xxs)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(calendarMode == mode ? Theme.surface : .clear)
+                                .shadow(
+                                    color: calendarMode == mode ? Theme.cardShadow().opacity(0.9) : .clear,
+                                    radius: 4,
+                                    y: 2
+                                )
+                        )
+                        .scaleEffect(calendarMode == mode ? 1 : 0.985)
+                        .opacity(calendarMode == mode ? 1 : 0.88)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Theme.surface2.opacity(0.92))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Theme.textSecondary.opacity(0.12), lineWidth: 1)
+        }
+        .animation(.easeOut(duration: 0.16), value: calendarMode)
     }
 
     private var weekStrip: some View {
@@ -385,21 +491,21 @@ struct TodayView: View {
                         .font(Theme.Typography.bodySmallStrong)
                         .foregroundStyle(Theme.text)
                 }
-                .frame(maxWidth: .infinity, minHeight: 56)
-                .padding(.vertical, Theme.Spacing.xxs)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .padding(.vertical, Theme.Spacing.xxxs)
                 .background(
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(total == 0 ? Theme.surface.opacity(0.55) : Theme.accent.opacity(0.06 + (0.14 * progress)))
+                        .fill(total == 0 ? Theme.surface2.opacity(0.7) : Theme.accent.opacity(0.05 + (0.12 * progress)))
                 )
                 .overlay {
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(isSelected ? Theme.accent.opacity(0.7) : Color.clear, lineWidth: 1)
+                        .stroke(isSelected ? Theme.accent.opacity(0.72) : Color.clear, lineWidth: 0.8)
                 }
 
                 if isComplete {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Theme.success)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Theme.success.opacity(0.86))
                         .padding(4)
                 }
             }
@@ -408,19 +514,18 @@ struct TodayView: View {
     }
 
     private var monthHeatmap: some View {
-        VStack(spacing: Theme.Spacing.xxs) {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.xxs), count: 7), spacing: Theme.Spacing.xxs) {
+        VStack(spacing: Theme.Spacing.xxxs) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7), spacing: 8) {
                 ForEach(Array(monthGridDays.enumerated()), id: \.offset) { _, day in
                     if let day {
                         monthCell(for: day)
                     } else {
                         Color.clear
-                            .frame(height: 24)
+                            .frame(height: 20)
                     }
                 }
             }
         }
-        .padding(.top, Theme.Spacing.xxs)
     }
 
     private func monthCell(for day: Date) -> some View {
@@ -437,38 +542,37 @@ struct TodayView: View {
         } label: {
             ZStack(alignment: .topTrailing) {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(total == 0 ? Theme.surface2.opacity(0.62) : Theme.accent.opacity(0.10 + (0.42 * ratio)))
+                    .fill(total == 0 ? Theme.surface2.opacity(0.4) : Theme.accent.opacity(0.05 + (0.16 * ratio)))
                     .overlay {
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .stroke(isSelected ? Theme.accent.opacity(0.72) : .clear, lineWidth: 1)
+                            .stroke(isSelected ? Theme.accent.opacity(0.7) : .clear, lineWidth: 0.6)
                     }
 
                 if isComplete {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Theme.success)
+                        .font(.system(size: 7, weight: .semibold))
+                        .foregroundStyle(Theme.success.opacity(0.84))
                         .padding(3)
                 }
             }
-            .frame(height: 24)
+            .frame(height: 20)
         }
         .buttonStyle(.plain)
     }
 
     private var headerBackground: some ShapeStyle {
-        if completedSelectedDayCount >= todayCap {
-            return AnyShapeStyle(
-                LinearGradient(
-                    colors: [
-                        Theme.surface,
-                        Theme.accent.opacity(0.08)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+        let completionGlow = completedSelectedDayCount >= todayCap ? 0.07 : 0.04
+        return AnyShapeStyle(
+            LinearGradient(
+                colors: [
+                    Theme.surface,
+                    Theme.surface2.opacity(0.55),
+                    Theme.accent.opacity(completionGlow)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
-        }
-        return AnyShapeStyle(Theme.surface)
+        )
     }
 
     private var ritualsSection: some View {
@@ -493,15 +597,23 @@ struct TodayView: View {
 
     private var focusSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionLabel(icon: "scope", title: "Focus")
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xxs) {
+                Image(systemName: "scope")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Theme.accent.opacity(0.5))
 
-                Spacer(minLength: 0)
+                Text("Focus")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .tracking(0.2)
+                    .foregroundStyle(Theme.textSecondary)
 
                 Text(formatMinutes(totalFocusSecondsSelectedDay))
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.textSecondary)
                     .contentTransition(.numericText())
+
+                Spacer(minLength: 0)
             }
 
             if let carriedForwardLine, !isFocusMode {
@@ -534,19 +646,19 @@ struct TodayView: View {
                             }
                         } label: {
                             Text(option.label)
-                                .font(Theme.Typography.caption.weight(.semibold))
+                                .font(Theme.Typography.caption.weight(.medium))
                                 .foregroundStyle(focusTimeFilter == option ? Theme.accent : Theme.textSecondary)
-                                .padding(.horizontal, Theme.Spacing.sm)
-                                .padding(.vertical, Theme.Spacing.xxs)
+                                .padding(.horizontal, Theme.Spacing.xs)
+                                .padding(.vertical, Theme.Spacing.xxxs)
                                 .background(
                                     Capsule(style: .continuous)
-                                        .fill(focusTimeFilter == option ? Theme.accent.opacity(0.14) : Theme.surface2)
+                                        .fill(focusTimeFilter == option ? Theme.accent.opacity(0.11) : Theme.surface2.opacity(0.82))
                                 )
                                 .overlay {
                                     Capsule(style: .continuous)
                                         .stroke(
-                                            focusTimeFilter == option ? Theme.accent.opacity(0.45) : Theme.textSecondary.opacity(0.16),
-                                            lineWidth: 1
+                                            focusTimeFilter == option ? Theme.accent.opacity(0.34) : Theme.textSecondary.opacity(0.12),
+                                            lineWidth: 0.9
                                         )
                                 }
                         }
@@ -562,6 +674,11 @@ struct TodayView: View {
                     .foregroundStyle(Theme.textSecondary)
             }
 
+            Rectangle()
+                .fill(Theme.textSecondary.opacity(0.12))
+                .frame(height: 0.8)
+                .padding(.top, Theme.Spacing.xxxs)
+
             if visibleFocusTasks.isEmpty {
                 EmptyStatePanel(
                     symbol: isFocusMode ? "timer" : "checklist",
@@ -569,7 +686,7 @@ struct TodayView: View {
                     subtitle: isFocusMode ? "Mark one task as High to enter focus flow." : "Assign from Inbox or capture a task."
                 )
             } else {
-                VStack(spacing: Theme.Spacing.xxs) {
+                VStack(spacing: Theme.Spacing.sm) {
                     ForEach(visibleFocusTasks) { task in
                         FocusTaskRow(
                             task: task,
@@ -606,6 +723,81 @@ struct TodayView: View {
                 .padding(.top, Theme.Spacing.xxxs)
             }
         }
+    }
+
+    private var immersiveFocusLayer: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Theme.surface,
+                    Theme.surface2.opacity(0.94),
+                    Theme.accent.opacity(0.07)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .opacity(0.18)
+                .ignoresSafeArea()
+
+            VStack(spacing: Theme.Spacing.lg) {
+                Spacer(minLength: 64)
+
+                Text(activeFocusTask?.title ?? "Select a high-priority task")
+                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.text)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .frame(maxWidth: 340)
+
+                Text(timeString(focusElapsedSeconds))
+                    .font(.system(size: 72, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.text)
+                    .contentTransition(.numericText())
+
+                Button {
+                    handleImmersiveFocusPrimaryAction()
+                } label: {
+                    Text(immersiveFocusPrimaryTitle)
+                        .font(Theme.Typography.bodySmallStrong)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Theme.Spacing.sm)
+                        .background(Theme.accent, in: Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 42)
+
+                Spacer(minLength: 88)
+            }
+            .padding(.horizontal, Theme.Spacing.lg)
+        }
+    }
+
+    private var immersiveFocusPrimaryTitle: String {
+        if focusIsRunning || focusElapsedSeconds == 0 { return "Pause" }
+        return "End Focus"
+    }
+
+    private func handleImmersiveFocusPrimaryAction() {
+        if focusIsRunning {
+            pauseFocusTimer()
+            return
+        }
+
+        if focusElapsedSeconds > 0 {
+            endFocusSession()
+            withAnimation(.snappy(duration: 0.24)) {
+                isFocusMode = false
+            }
+            return
+        }
+
+        startFocusTimer()
     }
 
     private var focusTimerStrip: some View {
@@ -826,7 +1018,7 @@ struct TodayView: View {
             withAnimation(.snappy(duration: 0.24)) {
                 daySyncAnchor = currentDay
                 selectedDate = currentDay
-                showingMonthMap = false
+                calendarMode = .week
                 showLaterTasks = false
             }
         } else {
@@ -889,6 +1081,20 @@ struct TodayView: View {
         return (pending, completed)
     }
 
+    private func completionStreakEnding(at day: Date) -> Int {
+        let completionDays = Set(completedTasks.map { assignmentDay(for: $0) })
+        var streak = 0
+        var cursor = calendar.startOfDay(for: day)
+
+        while completionDays.contains(cursor) {
+            streak += 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+        }
+
+        return streak
+    }
+
     private func sortedByPriority(_ items: [TaskItem]) -> [TaskItem] {
         items.sorted { lhs, rhs in
             if lhs.priority.sortRank != rhs.priority.sortRank {
@@ -947,6 +1153,30 @@ struct TodayView: View {
         }
     }
 
+    private func focusFilter(for partOfDay: TaskPartOfDay) -> FocusTimeFilter {
+        switch partOfDay {
+        case .morning: return .morning
+        case .afternoon: return .afternoon
+        case .evening: return .evening
+        case .anytime: return .all
+        }
+    }
+
+    private func synchronizeFocusFilterWithCurrentPartOfDay(force: Bool = false) {
+        let current = currentPartOfDay
+        let didPartOfDayChange = current != lastObservedPartOfDay
+        guard force || didPartOfDayChange else { return }
+
+        lastObservedPartOfDay = current
+        let targetFilter = focusFilter(for: current)
+        guard focusTimeFilter != targetFilter else { return }
+
+        withAnimation(.snappy(duration: 0.18)) {
+            focusTimeFilter = targetFilter
+            showLaterTasks = false
+        }
+    }
+
     private func partOfDayLabel(_ partOfDay: TaskPartOfDay) -> String {
         switch partOfDay {
         case .anytime: return "Anytime"
@@ -978,21 +1208,6 @@ struct TodayView: View {
         return "\(hours)h \(remainder)m"
     }
 
-    private var monthToggleGesture: some Gesture {
-        DragGesture(minimumDistance: 18, coordinateSpace: .local)
-            .onEnded { value in
-                guard abs(value.translation.height) > abs(value.translation.width) else { return }
-                if value.translation.height > 28, !showingMonthMap {
-                    withAnimation(.snappy(duration: 0.24)) {
-                        showingMonthMap = true
-                    }
-                } else if value.translation.height < -28, showingMonthMap {
-                    withAnimation(.snappy(duration: 0.24)) {
-                        showingMonthMap = false
-                    }
-                }
-            }
-    }
 }
 
 private struct FocusTaskRow: View {
@@ -1007,7 +1222,7 @@ private struct FocusTaskRow: View {
         HStack(spacing: Theme.Spacing.sm) {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(priorityTone(for: task.priority))
-                .frame(width: 3, height: 34)
+                .frame(width: 1.5, height: 30)
 
             Button {
                 onSelect()
@@ -1049,12 +1264,16 @@ private struct FocusTaskRow: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, Theme.Spacing.xxs)
-        .padding(.vertical, Theme.Spacing.xs)
+        .padding(.horizontal, Theme.Spacing.xxxs)
+        .padding(.vertical, Theme.Spacing.compact)
         .background(
             RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
-                .fill(isActive ? Theme.accent.opacity(0.08) : Color.clear)
+                .fill(isActive ? Theme.accent.opacity(0.04) : Color.clear)
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                .stroke(isActive ? Theme.accent.opacity(0.2) : .clear, lineWidth: 0.8)
+        }
         .matchedGeometryEffect(id: task.id, in: namespace)
         .contentShape(Rectangle())
         .contextMenu {
@@ -1078,11 +1297,11 @@ private struct FocusTaskRow: View {
     private func priorityTone(for priority: TaskPriority) -> Color {
         switch priority {
         case .high:
-            return Theme.accent.opacity(0.68)
+            return Theme.accent.opacity(0.62)
         case .medium:
-            return Theme.textSecondary.opacity(0.34)
+            return Theme.textSecondary.opacity(0.28)
         case .low:
-            return Theme.textSecondary.opacity(0.18)
+            return Theme.textSecondary.opacity(0.14)
         }
     }
 
