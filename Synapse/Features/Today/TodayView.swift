@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct TodayView: View {
     let taskNamespace: Namespace.ID
@@ -42,6 +43,7 @@ struct TodayView: View {
     @State private var focusToastMessage = ""
     @State private var showingFocusToast = false
     @State private var focusToastWorkItem: DispatchWorkItem?
+    @State private var daySyncAnchor = Calendar.current.startOfDay(for: .now)
 
     private enum FocusTimeFilter: String, CaseIterable {
         case all
@@ -190,7 +192,7 @@ struct TodayView: View {
 
     var body: some View {
         NavigationStack {
-            ScreenCanvas {
+            ScreenCanvas(daySeed: daySyncAnchor) {
                 ZStack(alignment: .bottomTrailing) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -234,11 +236,17 @@ struct TodayView: View {
                 )
             }
             .onAppear {
-                rollForwardUnfinishedTasksIfNeeded()
+                synchronizeDayState()
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
-                rollForwardUnfinishedTasksIfNeeded()
+                synchronizeDayState()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+                synchronizeDayState()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+                synchronizeDayState()
             }
             .onChange(of: externalCaptureRequestID) { _, _ in
                 showingCapture = true
@@ -800,6 +808,32 @@ struct TodayView: View {
             task.carriedOverFrom = nil
         }
         try? modelContext.save()
+    }
+
+    private func synchronizeDayState() {
+        let currentDay = todayStart
+        let dayChanged = !calendar.isDate(currentDay, inSameDayAs: daySyncAnchor)
+
+        if dayChanged {
+            if focusIsRunning {
+                pauseFocusTimer()
+            }
+
+            focusElapsedSeconds = 0
+            focusTaskSeconds = [:]
+            focusActiveTaskID = nil
+
+            withAnimation(.snappy(duration: 0.24)) {
+                daySyncAnchor = currentDay
+                selectedDate = currentDay
+                showingMonthMap = false
+                showLaterTasks = false
+            }
+        } else {
+            daySyncAnchor = currentDay
+        }
+
+        rollForwardUnfinishedTasksIfNeeded()
     }
 
     private func rollForwardUnfinishedTasksIfNeeded() {
