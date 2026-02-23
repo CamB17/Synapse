@@ -2,7 +2,14 @@ import SwiftUI
 
 enum Theme {
     // MARK: - Core Palette (Light-first)
-    static let canvas = Color(red: 0.97, green: 0.96, blue: 0.94)
+    static func canvas(for day: Date = .now) -> Color {
+        let tone = dayTone(for: day)
+        return Color(
+            red: clamp(0.97 + (tone.warm * 0.006) - (tone.cool * 0.002)),
+            green: clamp(0.96 + (tone.warm * 0.003) + (tone.cool * 0.003)),
+            blue: clamp(0.94 - (tone.warm * 0.004) + (tone.cool * 0.004))
+        )
+    }
     static let surface = Color.white
     static let surface2 = Color(red: 0.98, green: 0.98, blue: 0.99)
 
@@ -33,15 +40,39 @@ enum Theme {
         endPoint: .bottomTrailing
     )
     
-    static let topDepthGradient = LinearGradient(
-        colors: [
-            Color(red: 0.93, green: 0.90, blue: 1.00).opacity(0.55),
-            Color(red: 0.98, green: 0.94, blue: 0.91).opacity(0.42),
-            .clear
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
+    static func topDepthGradient(for day: Date = .now) -> LinearGradient {
+        let tone = dayTone(for: day)
+        return LinearGradient(
+            colors: [
+                Color(
+                    red: clamp(0.93 + (tone.cool * 0.010)),
+                    green: clamp(0.90 + (tone.warm * 0.004)),
+                    blue: clamp(1.00 - (tone.warm * 0.008))
+                ).opacity(0.53),
+                Color(
+                    red: clamp(0.98 + (tone.warm * 0.003)),
+                    green: clamp(0.94 + (tone.warm * 0.004)),
+                    blue: clamp(0.91 + (tone.cool * 0.006))
+                ).opacity(0.40),
+                .clear
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private static func dayTone(for day: Date) -> (warm: Double, cool: Double) {
+        let calendar = Calendar.current
+        let ordinal = calendar.ordinality(of: .day, in: .year, for: day) ?? 1
+        let base = Double(ordinal)
+        let warm = sin(base * 0.29)
+        let cool = cos(base * 0.23)
+        return (warm, cool)
+    }
+
+    private static func clamp(_ value: Double) -> Double {
+        min(1, max(0, value))
+    }
 
     // MARK: - Layout Tokens
     static let radius: CGFloat = 18
