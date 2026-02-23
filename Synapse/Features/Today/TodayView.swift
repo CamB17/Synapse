@@ -33,14 +33,34 @@ struct TodayView: View {
     @State private var showingCompletedReview = false
     @State private var momentumTriggeredDay: Date?
     @State private var milestoneTriggeredDay: Date?
+    @State private var selectedDate = Calendar.current.startOfDay(for: .now)
     @StateObject private var brainReactor = BrainReactionController()
 
     private var todayCap: Int { 5 }
-    private var remainingCount: Int { todayTasks.count }
-    private var isDayClear: Bool { todayTasks.isEmpty }
+    private var calendar: Calendar { .current }
+    private var selectedDayStart: Date { calendar.startOfDay(for: selectedDate) }
+    private var selectedDayIsToday: Bool { calendar.isDateInToday(selectedDayStart) }
+    private var selectedDayTitle: String {
+        selectedDayStart.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+    }
+    private var selectedDaySubtitle: String {
+        selectedDayIsToday ? "Today" : selectedDayStart.formatted(date: .abbreviated, time: .omitted)
+    }
+    private var weekDays: [Date] {
+        guard let interval = calendar.dateInterval(of: .weekOfYear, for: selectedDayStart) else {
+            return []
+        }
+        return (0..<7).compactMap { offset in
+            calendar.date(byAdding: .day, value: offset, to: interval.start)
+        }
+    }
+    private var selectedTodayTasks: [TaskItem] {
+        todayTasks.filter { calendar.isDate($0.createdAt, inSameDayAs: selectedDayStart) }
+    }
+    private var remainingCount: Int { selectedTodayTasks.count }
+    private var isDayClear: Bool { selectedTodayTasks.isEmpty }
     private var completedTodayCount: Int {
-        let start = Calendar.current.startOfDay(for: .now)
-        return completedTasks.filter { ($0.completedAt ?? .distantPast) >= start }.count
+        completedTasks.filter { calendar.isDate($0.createdAt, inSameDayAs: selectedDayStart) }.count
     }
     private var activeHabits: [Habit] {
         habits.filter(\.isActive)
@@ -49,16 +69,16 @@ struct TodayView: View {
         activeHabits.filter(\.completedToday).count
     }
     private var todayCompleted: [TaskItem] {
-        let start = Calendar.current.startOfDay(for: .now)
-        return completedTasks.filter { ($0.completedAt ?? .distantPast) >= start }
+        completedTasks.filter { calendar.isDate($0.createdAt, inSameDayAs: selectedDayStart) }
     }
 
     private var headerDenominator: Int { todayCap }
 
     private var focusSecondsToday: Int {
-        let start = Calendar.current.startOfDay(for: .now)
+        let start = selectedDayStart
+        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? .distantFuture
         return sessions
-            .filter { $0.startedAt >= start }
+            .filter { $0.startedAt >= start && $0.startedAt < end }
             .reduce(0) { $0 + $1.durationSeconds }
     }
     
@@ -81,10 +101,10 @@ struct TodayView: View {
     }
     
     private var mascotExpression: BrainMascot.Expression {
-        let taskWorkload = todayTasks.count + completedTodayCount
-        let habitWorkload = activeHabits.count
+        let taskWorkload = selectedTodayTasks.count + completedTodayCount
+        let habitWorkload = selectedDayIsToday ? activeHabits.count : 0
         let totalWorkload = max(1, taskWorkload + habitWorkload)
-        let completedWorkload = completedTodayCount + completedHabitsTodayCount
+        let completedWorkload = completedTodayCount + (selectedDayIsToday ? completedHabitsTodayCount : 0)
         let completionRatio = Double(completedWorkload) / Double(totalWorkload)
         if completionRatio >= 0.65 { return .proud }
         if completionRatio > 0.45 { return .balanced }
@@ -149,7 +169,7 @@ struct TodayView: View {
         .sheet(isPresented: $showingCapture) {
             QuickCaptureSheet(
                 placeholder: "Capture something…",
-                canAddToToday: todayTasks.count < todayCap,
+                canAddToToday: selectedTodayTasks.count < todayCap,
                 onAdded: { task, addedToToday in
                     handleCapturedTask(task, addedToToday: addedToToday)
                 }
@@ -157,6 +177,7 @@ struct TodayView: View {
         }
         .sheet(isPresented: $showingCompletedReview) {
             CompletedTodaySheet(
+                dayTitle: selectedDayTitle,
                 tasks: todayCompleted,
                 onDelete: { task in
                     deleteCompletedTask(task)
@@ -180,6 +201,7 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 header
+                weekCalendar
                 HabitBlock(onCompletionStateChange: handleHabitCompletionStateChange)
 
                 if isDayClear {
@@ -258,7 +280,7 @@ struct TodayView: View {
                 .animation(.snappy(duration: 0.22), value: headerProgress)
         }
         .padding(.bottom, Theme.Spacing.xs)
-        .animation(.snappy(duration: 0.18), value: todayTasks.count)
+        .animation(.snappy(duration: 0.18), value: selectedTodayTasks.count)
         .animation(.snappy(duration: 0.18), value: completedTodayCount)
         .animation(.snappy(duration: 0.18), value: focusSecondsToday)
     }
@@ -266,12 +288,61 @@ struct TodayView: View {
     private var dayClearState: some View {
         EmptyStatePanel(
             symbol: "checkmark.circle",
-            title: "Board clear.",
-            subtitle: "Capture anything that comes up.",
+            title: completedTodayCount > 0 ? "All done for \(selectedDaySubtitle)." : "No commitments on \(selectedDaySubtitle).",
+            subtitle: completedTodayCount > 0 ? "Nice work. You cleared this date." : "Capture something to plan this day.",
             playful: true,
             showSparkle: true
         )
         .transition(.opacity)
+    }
+
+    private var weekCalendar: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Week")
+                    .font(Theme.Typography.sectionLabel)
+                    .tracking(Theme.Typography.sectionTracking)
+                    .foregroundStyle(Theme.textSecondary)
+
+                Spacer(minLength: 0)
+
+                Text(selectedDayTitle)
+                    .font(Theme.Typography.bodySmallStrong)
+                    .foregroundStyle(Theme.text)
+            }
+
+            HStack(spacing: Theme.Spacing.xs) {
+                ForEach(weekDays, id: \.self) { day in
+                    let summary = daySummary(for: day)
+                    Button {
+                        withAnimation(.snappy(duration: 0.18)) {
+                            selectedDate = calendar.startOfDay(for: day)
+                        }
+                    } label: {
+                        VStack(spacing: Theme.Spacing.compact) {
+                            Text(day.formatted(.dateTime.weekday(.narrow)))
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.textSecondary)
+
+                            Text(day.formatted(.dateTime.day()))
+                                .font(Theme.Typography.bodySmallStrong)
+                                .foregroundStyle(calendar.isDate(day, inSameDayAs: selectedDayStart) ? Theme.surface : Theme.text)
+
+                            daySummaryIcon(pendingCount: summary.pendingCount, completedCount: summary.completedCount)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 88)
+                        .padding(.vertical, Theme.Spacing.xs)
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                                .fill(calendar.isDate(day, inSameDayAs: selectedDayStart) ? Theme.accent2 : Theme.surface)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(Theme.Spacing.cardInset)
+        .surfaceCard()
     }
 
     private var remainingSection: some View {
@@ -281,7 +352,7 @@ struct TodayView: View {
                 .animation(.snappy(duration: 0.18), value: remainingCount)
 
             VStack(spacing: Theme.Spacing.sm) {
-                ForEach(todayTasks) { task in
+                ForEach(selectedTodayTasks) { task in
                     SwipeCompleteRow(
                         onComplete: { complete(task) },
                         onTap: { focusTask = task }
@@ -375,6 +446,32 @@ struct TodayView: View {
         return "\(h)h \(m)m"
     }
 
+    private func daySummary(for day: Date) -> (pendingCount: Int, completedCount: Int) {
+        let pending = todayTasks.filter { calendar.isDate($0.createdAt, inSameDayAs: day) }.count
+        let completed = completedTasks.filter { calendar.isDate($0.createdAt, inSameDayAs: day) }.count
+        return (pending, completed)
+    }
+
+    @ViewBuilder
+    private func daySummaryIcon(pendingCount: Int, completedCount: Int) -> some View {
+        if pendingCount == 0, completedCount > 0 {
+            Image(systemName: "checkmark.circle.fill")
+                .font(Theme.Typography.iconMedium)
+                .foregroundStyle(Theme.success)
+        } else if pendingCount > 0 {
+            Text("\(pendingCount)")
+                .font(Theme.Typography.caption.weight(.semibold))
+                .foregroundStyle(Theme.accent)
+                .padding(.horizontal, Theme.Spacing.xs)
+                .padding(.vertical, Theme.Spacing.xxxs)
+                .background(Theme.accent.opacity(0.12), in: Capsule())
+        } else {
+            Circle()
+                .stroke(Theme.textSecondary.opacity(0.25), lineWidth: 1)
+                .frame(width: 12, height: 12)
+        }
+    }
+
     private var captureToast: some View {
         HStack(spacing: Theme.Spacing.xs) {
             Text("Added to Inbox")
@@ -383,7 +480,7 @@ struct TodayView: View {
 
             Spacer()
 
-            if let task = toastTask, task.state == .inbox, todayTasks.count < todayCap {
+            if let task = toastTask, task.state == .inbox, selectedTodayTasks.count < todayCap {
                 Button("Commit") {
                     commitToToday(task)
                 }
@@ -413,24 +510,39 @@ struct TodayView: View {
     }
 
     private func handleCapturedTask(_ task: TaskItem, addedToToday: Bool) {
-        guard !addedToToday else { return }
+        guard !addedToToday else {
+            task.createdAt = assignmentTimestamp(for: selectedDayStart)
+            try? modelContext.save()
+            return
+        }
         toastTask = task
         showingCaptureToast = true
         scheduleToastDismiss()
     }
 
     private func commitToToday(_ task: TaskItem) {
-        guard task.state == .inbox, todayTasks.count < todayCap else { return }
+        guard task.state == .inbox, selectedTodayTasks.count < todayCap else { return }
         let haptic = UIImpactFeedbackGenerator(style: .soft)
         haptic.impactOccurred()
 
         withAnimation(.snappy(duration: 0.18)) {
             task.state = .today
+            task.createdAt = assignmentTimestamp(for: selectedDayStart)
             showingCaptureToast = false
         }
         toastDismissWorkItem?.cancel()
         toastDismissWorkItem = nil
         try? modelContext.save()
+    }
+
+    private func assignmentTimestamp(for day: Date) -> Date {
+        let nowComponents = calendar.dateComponents([.hour, .minute, .second], from: .now)
+        return calendar.date(
+            bySettingHour: nowComponents.hour ?? 12,
+            minute: nowComponents.minute ?? 0,
+            second: nowComponents.second ?? 0,
+            of: day
+        ) ?? day
     }
 
     private func scheduleToastDismiss() {
@@ -525,6 +637,7 @@ struct TodayView: View {
 
 private struct CompletedTodaySheet: View {
     @Environment(\.dismiss) private var dismiss
+    let dayTitle: String
     let tasks: [TaskItem]
     let onDelete: (TaskItem) -> Void
     private let calendar = Calendar.current
@@ -568,7 +681,7 @@ private struct CompletedTodaySheet: View {
             Group {
                 if tasks.isEmpty {
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Nothing completed yet today.")
+                        Text("Nothing completed on \(dayTitle).")
                             .font(Theme.Typography.bodyMedium.weight(.semibold))
                             .foregroundStyle(Theme.text)
                         Text("Complete one commitment to start momentum.")

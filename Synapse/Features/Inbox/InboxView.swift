@@ -21,6 +21,9 @@ struct InboxView: View {
     @StateObject private var voiceCapture = VoiceCaptureController()
 
     private let todayCap = 5
+    private var todayAssignedCount: Int {
+        todayTasks.filter { Calendar.current.isDateInToday($0.createdAt) }.count
+    }
 
     var body: some View {
         NavigationStack {
@@ -164,7 +167,7 @@ struct InboxView: View {
     }
 
     private func commitToToday(_ item: TaskItem) {
-        guard todayTasks.count < todayCap else {
+        guard todayAssignedCount < todayCap else {
             showCapAlert = true
             return
         }
@@ -178,6 +181,7 @@ struct InboxView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
             withAnimation(.snappy(duration: 0.22)) {
                 item.state = .today
+                item.createdAt = .now
                 onCommitToToday?()
             }
             try? modelContext.save()
