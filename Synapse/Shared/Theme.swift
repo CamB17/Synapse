@@ -11,10 +11,10 @@ enum Theme {
         )
     }
     static let surface = Color.white
-    static let surface2 = Color(red: 0.98, green: 0.98, blue: 0.99)
+    static let surface2 = Color(red: 0.992, green: 0.988, blue: 0.982)
 
     static let text = Color(red: 0.10, green: 0.10, blue: 0.12)
-    static let textSecondary = Color(red: 0.40, green: 0.40, blue: 0.46)
+    static let textSecondary = Color(red: 0.45, green: 0.44, blue: 0.47)
 
     static let accent = Color(red: 0.43, green: 0.35, blue: 0.88)
     static let accent2 = Color(red: 0.96, green: 0.58, blue: 0.50)
@@ -76,11 +76,11 @@ enum Theme {
 
     // MARK: - Layout Tokens
     static let radius: CGFloat = 18
-    static let radiusSmall: CGFloat = 14
+    static let radiusSmall: CGFloat = 12
 
-    static func cardShadow() -> Color { .black.opacity(0.06) }
-    static let shadowRadius: CGFloat = 12
-    static let shadowY: CGFloat = 6
+    static func cardShadow() -> Color { .black.opacity(0.04) }
+    static let shadowRadius: CGFloat = 10
+    static let shadowY: CGFloat = 4
 
     enum Spacing {
         static let xxxs: CGFloat = 2
