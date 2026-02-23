@@ -49,6 +49,8 @@ struct TodayView: View {
     @State private var daySyncAnchor = Calendar.current.startOfDay(for: .now)
     @State private var animatedCompletionRatio: CGFloat = 0
     @State private var headerProgressPulse = false
+    @State private var headerCompletionGlow = false
+    @State private var hasInitializedHeaderProgress = false
     private let partOfDayTicker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     private enum FocusTimeFilter: String, CaseIterable {
@@ -181,55 +183,53 @@ struct TodayView: View {
         return hasYesterdayCarry ? "Carried forward from yesterday" : "Carried forward"
     }
 
-    private var completedSelectedDayCount: Int {
-        completedTasks.filter { task in
-            calendar.isDate(assignmentDay(for: task), inSameDayAs: selectedDayStart)
-        }.count
+    private var activeHabits: [Habit] {
+        habits.filter(\.isActive)
     }
 
-    private var completionRatio: CGFloat {
-        guard todayCap > 0 else { return 0 }
-        let ratio = CGFloat(completedSelectedDayCount) / CGFloat(todayCap)
+    private var activeHabitCount: Int {
+        activeHabits.count
+    }
+
+    private var completedHabitCount: Int {
+        activeHabits.filter(\.completedToday).count
+    }
+
+    private var allRitualsComplete: Bool {
+        activeHabitCount > 0 && completedHabitCount == activeHabitCount
+    }
+
+    private var ritualCompletionRatio: CGFloat {
+        guard activeHabitCount > 0 else { return 0 }
+        let ratio = CGFloat(completedHabitCount) / CGFloat(activeHabitCount)
         return max(0, min(1, ratio))
     }
 
-    private var momentumDelta: Int {
-        weeklyCompletedCount(offsetWeeks: 0) - weeklyCompletedCount(offsetWeeks: -1)
-    }
-
-    private var momentumLine: String {
-        if momentumDelta > 0 {
-            return "Momentum ↑ +\(momentumDelta) this week"
+    private var ritualProgressLine: String {
+        guard activeHabitCount > 0 else {
+            return "No rituals set yet"
         }
-        if momentumDelta < 0 {
-            return "Momentum ↓ \(momentumDelta) this week"
+        if allRitualsComplete {
+            return "Day complete."
         }
-        return "Momentum → 0 this week"
+        return "\(completedHabitCount) of \(activeHabitCount) rituals complete"
     }
 
     private var currentStreak: Int {
-        completionStreakEnding(at: todayStart)
+        guard !activeHabits.isEmpty else { return 0 }
+        return activeHabits.map(effectiveStreak(for:)).min() ?? 0
     }
 
     private var headerMomentumLine: String {
-        if currentStreak > 0 {
-            return "Momentum → \(currentStreak) day streak"
+        "Momentum → \(currentStreak) day streak"
+    }
+
+    private func effectiveStreak(for habit: Habit) -> Int {
+        guard let lastCompletedDate = habit.lastCompletedDate else { return 0 }
+        if calendar.isDateInToday(lastCompletedDate) || calendar.isDateInYesterday(lastCompletedDate) {
+            return habit.currentStreak
         }
-        return momentumLine
-    }
-
-    private var motivationLine: String {
-        completedSelectedDayCount > 0 ? "Keep it going." : "Start your first win."
-    }
-
-    private var momentumStripDays: [Date] {
-        (-6...0).compactMap { offset in
-            calendar.date(byAdding: .day, value: offset, to: todayStart)
-        }
-    }
-
-    private var maxMomentumStripCompletions: Int {
-        max(1, momentumStripDays.map { daySummary(for: $0).completedCount }.max() ?? 0)
+        return 0
     }
 
     private var totalFocusSecondsSelectedDay: Int {
@@ -301,7 +301,8 @@ struct TodayView: View {
                 synchronizeDayState()
                 synchronizeFocusFilterWithCurrentPartOfDay(force: true)
                 hideBottomNavigation = isFocusMode
-                animatedCompletionRatio = completionRatio
+                animatedCompletionRatio = ritualCompletionRatio
+                hasInitializedHeaderProgress = true
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
@@ -339,17 +340,13 @@ struct TodayView: View {
                     focusActiveTaskID = highPriorityTasks.first?.id
                 }
             }
-            .onChange(of: completedSelectedDayCount) { oldValue, newValue in
+            .onChange(of: completedHabitCount) { oldValue, newValue in
                 guard oldValue != newValue else { return }
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
-                    animatedCompletionRatio = completionRatio
-                }
-                withAnimation(.snappy(duration: 0.18)) {
-                    headerProgressPulse = true
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                    headerProgressPulse = false
-                }
+                animateHeaderProgress(triggerSuccess: newValue > oldValue && allRitualsComplete)
+            }
+            .onChange(of: activeHabitCount) { oldValue, newValue in
+                guard oldValue != newValue else { return }
+                animateHeaderProgress(triggerSuccess: false)
             }
             .onDisappear {
                 focusTimer?.invalidate()
@@ -383,7 +380,17 @@ struct TodayView: View {
                         .frame(width: max(0, proxy.size.width * animatedCompletionRatio))
                 }
             }
-            .frame(height: 6)
+            .frame(height: 9)
+            .overlay {
+                if allRitualsComplete || headerCompletionGlow {
+                    Capsule(style: .continuous)
+                        .stroke(Theme.accent.opacity(0.3), lineWidth: 0.9)
+                        .shadow(
+                            color: Theme.accent.opacity(headerCompletionGlow ? 0.36 : 0.18),
+                            radius: headerCompletionGlow ? 8 : 4
+                        )
+                }
+            }
             .animation(.spring(response: 0.34, dampingFraction: 0.82), value: animatedCompletionRatio)
 
             HStack(alignment: .firstTextBaseline) {
@@ -418,7 +425,7 @@ struct TodayView: View {
             }
             .padding(.bottom, Theme.Spacing.xxxs)
 
-            Text("\(completedSelectedDayCount) of \(todayCap) complete")
+            Text(ritualProgressLine)
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
                 .contentTransition(.numericText())
@@ -426,11 +433,6 @@ struct TodayView: View {
             Text(headerMomentumLine)
                 .font(.system(size: 11, weight: .medium, design: .rounded))
                 .foregroundStyle(Theme.textSecondary.opacity(0.78))
-                .contentTransition(.numericText())
-
-            Text(motivationLine)
-                .font(.system(size: 11, weight: .regular, design: .rounded))
-                .foregroundStyle(Theme.textSecondary.opacity(0.8))
                 .contentTransition(.numericText())
         }
         .padding(.horizontal, Theme.Spacing.cardInset)
@@ -445,8 +447,6 @@ struct TodayView: View {
 
     private var calendarRail: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            momentumStrip
-
             HStack {
                 Text(currentMonthLabel)
                     .font(Theme.Typography.caption)
@@ -465,21 +465,6 @@ struct TodayView: View {
             }
         }
         .animation(.snappy(duration: 0.22), value: calendarMode)
-    }
-
-    private var momentumStrip: some View {
-        HStack(alignment: .bottom, spacing: 4) {
-            ForEach(momentumStripDays, id: \.self) { day in
-                let completed = daySummary(for: day).completedCount
-                let normalized = CGFloat(completed) / CGFloat(maxMomentumStripCompletions)
-
-                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                    .fill(Theme.accent.opacity(completed == 0 ? 0.12 : 0.24 + (0.32 * normalized)))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 6 + (18 * normalized))
-            }
-        }
-        .frame(height: 26)
     }
 
     private var calendarModeControl: some View {
@@ -624,7 +609,7 @@ struct TodayView: View {
     }
 
     private var headerBackground: some ShapeStyle {
-        let completionGlow = completedSelectedDayCount >= todayCap ? 0.07 : 0.04
+        let completionGlow = (allRitualsComplete || headerCompletionGlow) ? 0.12 : 0.04
         return AnyShapeStyle(
             LinearGradient(
                 colors: [
@@ -636,6 +621,36 @@ struct TodayView: View {
                 endPoint: .bottomTrailing
             )
         )
+    }
+
+    private func animateHeaderProgress(triggerSuccess: Bool) {
+        guard hasInitializedHeaderProgress else {
+            animatedCompletionRatio = ritualCompletionRatio
+            return
+        }
+
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+            animatedCompletionRatio = ritualCompletionRatio
+        }
+        withAnimation(.snappy(duration: 0.18)) {
+            headerProgressPulse = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            headerProgressPulse = false
+        }
+
+        guard triggerSuccess else { return }
+        let success = UINotificationFeedbackGenerator()
+        success.notificationOccurred(.success)
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            headerCompletionGlow = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.62) {
+            withAnimation(.easeInOut(duration: 0.24)) {
+                headerCompletionGlow = false
+            }
+        }
     }
 
     private var ritualsSection: some View {
@@ -1136,17 +1151,6 @@ struct TodayView: View {
         return completedTasks.first(where: { $0.id == id })
     }
 
-    private func weeklyCompletedCount(offsetWeeks: Int) -> Int {
-        guard let thisWeek = calendar.dateInterval(of: .weekOfYear, for: selectedDayStart) else { return 0 }
-        let start = calendar.date(byAdding: .day, value: offsetWeeks * 7, to: thisWeek.start) ?? thisWeek.start
-        let end = calendar.date(byAdding: .day, value: 7, to: start) ?? thisWeek.end
-
-        return completedTasks.filter { task in
-            guard let completedAt = task.completedAt else { return false }
-            return completedAt >= start && completedAt < end
-        }.count
-    }
-
     private func daySummary(for day: Date) -> (pendingCount: Int, completedCount: Int) {
         let target = calendar.startOfDay(for: day)
         let pending = todayTasks.filter { task in
@@ -1156,20 +1160,6 @@ struct TodayView: View {
             calendar.isDate(assignmentDay(for: task), inSameDayAs: target)
         }.count
         return (pending, completed)
-    }
-
-    private func completionStreakEnding(at day: Date) -> Int {
-        let completionDays = Set(completedTasks.map { assignmentDay(for: $0) })
-        var streak = 0
-        var cursor = calendar.startOfDay(for: day)
-
-        while completionDays.contains(cursor) {
-            streak += 1
-            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
-            cursor = previous
-        }
-
-        return streak
     }
 
     private func sortedByPriority(_ items: [TaskItem]) -> [TaskItem] {

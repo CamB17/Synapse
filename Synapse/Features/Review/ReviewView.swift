@@ -68,6 +68,16 @@ struct ReviewView: View {
             .reduce(0) { $0 + $1.durationSeconds }
     }
 
+    private var dailyTrendDays: [Date] {
+        (-6...0).compactMap { offset in
+            calendar.date(byAdding: .day, value: offset, to: todayStart)
+        }
+    }
+
+    private var maxDailyTrendCompletions: Int {
+        max(1, dailyTrendDays.map { dailyTaskSummary(for: $0).completed }.max() ?? 0)
+    }
+
     private var dailyInsightLine: String {
         if dailyCompletionPercent >= 80 && dailyRitualConsistency >= 80 {
             return "Strong execution day. Keep tomorrow equally simple."
@@ -217,6 +227,12 @@ struct ReviewView: View {
 
     private var dailyReview: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text("Daily graph")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.textSecondary)
+
+            dailyTrendStrip
+
             metricRow(label: "Completion %", value: "\(dailyCompletionPercent)%")
             metricRow(label: "Ritual consistency", value: "\(dailyRitualConsistency)%")
             metricRow(label: "Task throughput", value: "\(dailyCompletedTasks.count)")
@@ -229,6 +245,28 @@ struct ReviewView: View {
         }
         .padding(Theme.Spacing.cardInset)
         .surfaceCard()
+    }
+
+    private var dailyTrendStrip: some View {
+        HStack(alignment: .bottom, spacing: Theme.Spacing.xxs) {
+            ForEach(dailyTrendDays, id: \.self) { day in
+                let summary = dailyTaskSummary(for: day)
+                let normalized = CGFloat(summary.completed) / CGFloat(maxDailyTrendCompletions)
+
+                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                    .fill(Theme.accent.opacity(summary.completed == 0 ? 0.12 : 0.24 + (0.32 * normalized)))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 6 + (18 * normalized))
+                    .overlay(alignment: .bottom) {
+                        if calendar.isDateInToday(day) {
+                            RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                                .stroke(Theme.accent.opacity(0.5), lineWidth: 0.8)
+                        }
+                    }
+            }
+        }
+        .frame(height: 26)
+        .padding(.bottom, Theme.Spacing.xxs)
     }
 
     private var monthlyReview: some View {
@@ -328,6 +366,18 @@ struct ReviewView: View {
                 .foregroundStyle(Theme.text)
                 .contentTransition(.numericText())
         }
+    }
+
+    private func dailyTaskSummary(for day: Date) -> (assigned: Int, completed: Int) {
+        let target = calendar.startOfDay(for: day)
+        let assigned = tasks.filter { task in
+            (task.state == .today || task.state == .completed)
+                && calendar.isDate(assignmentDay(for: task), inSameDayAs: target)
+        }.count
+        let completed = tasks.filter { task in
+            task.state == .completed && calendar.isDate(assignmentDay(for: task), inSameDayAs: target)
+        }.count
+        return (assigned, completed)
     }
 
     private func assignmentDay(for task: TaskItem) -> Date {
