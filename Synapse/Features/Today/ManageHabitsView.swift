@@ -12,9 +12,11 @@ struct ManageHabitsView: View {
     private var habits: [Habit]
 
     @State private var text: String = ""
+    @State private var voiceSeedText = ""
     @State private var editingHabitID: UUID?
     @State private var editingTitle: String = ""
     @FocusState private var isEditTitleFocused: Bool
+    @StateObject private var voiceCapture = VoiceCaptureController()
     
     private var activeHabits: [Habit] {
         habits.filter(\.isActive)
@@ -35,6 +37,16 @@ struct ManageHabitsView: View {
                             .surfaceCard()
 
                         Button {
+                            toggleVoiceCapture()
+                        } label: {
+                            Image(systemName: voiceCapture.isRecording ? "waveform.circle.fill" : "mic.circle.fill")
+                                .font(Theme.Typography.iconXL)
+                                .foregroundStyle(voiceCapture.isRecording ? Theme.accent2 : Theme.accent)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(voiceCapture.isRecording ? "Stop voice capture" : "Start voice capture")
+
+                        Button {
                             add()
                         } label: {
                             Image(systemName: "plus.circle.fill")
@@ -47,6 +59,14 @@ struct ManageHabitsView: View {
                     }
                     .padding(.horizontal, Theme.Spacing.md)
                     .padding(.top, Theme.Spacing.xs)
+
+                    if let error = voiceCapture.errorMessage {
+                        Text(error)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, Theme.Spacing.md)
+                    }
 
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         SectionLabel(icon: "leaf", title: "Active")
@@ -148,6 +168,9 @@ struct ManageHabitsView: View {
             .onChange(of: editingHabitID) { _, newValue in
                 isEditTitleFocused = newValue != nil
             }
+            .onDisappear {
+                voiceCapture.stop()
+            }
             .toolbar {
                 if showsDoneButton {
                     ToolbarItem(placement: .cancellationAction) {
@@ -160,6 +183,7 @@ struct ManageHabitsView: View {
     }
 
     private func add() {
+        voiceCapture.stop()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         modelContext.insert(Habit(title: trimmed))
@@ -169,6 +193,21 @@ struct ManageHabitsView: View {
         } catch {
             print("Habit save failed: \(error)")
         }
+    }
+
+    private func toggleVoiceCapture() {
+        voiceSeedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        voiceCapture.toggle { spoken in
+            text = mergedText(base: voiceSeedText, spoken: spoken)
+        }
+    }
+
+    private func mergedText(base: String, spoken: String) -> String {
+        let cleanedBase = base.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedSpoken = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedSpoken.isEmpty else { return cleanedBase }
+        guard !cleanedBase.isEmpty else { return cleanedSpoken }
+        return "\(cleanedBase) \(cleanedSpoken)"
     }
 
     private func beginEdit(for habit: Habit) {

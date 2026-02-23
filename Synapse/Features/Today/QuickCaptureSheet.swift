@@ -7,6 +7,8 @@ struct QuickCaptureSheet: View {
 
     @State private var text: String = ""
     @State private var addToToday = false
+    @State private var voiceSeedText = ""
+    @StateObject private var voiceCapture = VoiceCaptureController()
     let placeholder: String
     let canAddToToday: Bool
     let onAdded: ((TaskItem, Bool) -> Void)?
@@ -15,14 +17,34 @@ struct QuickCaptureSheet: View {
         NavigationStack {
             ScreenCanvas {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    TextField(placeholder, text: $text, axis: .vertical)
-                        .font(Theme.Typography.itemTitle)
-                        .foregroundStyle(Theme.text)
-                        .lineLimit(4, reservesSpace: true)
-                        .textInputAutocapitalization(.sentences)
-                        .padding(Theme.Spacing.cardInset)
-                        .surfaceCard()
-                        .padding(.top, Theme.Spacing.xs)
+                    HStack(alignment: .top, spacing: Theme.Spacing.xs) {
+                        TextField(placeholder, text: $text, axis: .vertical)
+                            .font(Theme.Typography.itemTitle)
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(4, reservesSpace: true)
+                            .textInputAutocapitalization(.sentences)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Button {
+                            toggleVoiceCapture()
+                        } label: {
+                            Image(systemName: voiceCapture.isRecording ? "waveform.circle.fill" : "mic.circle.fill")
+                                .font(Theme.Typography.iconXL)
+                                .foregroundStyle(voiceCapture.isRecording ? Theme.accent2 : Theme.accent)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(voiceCapture.isRecording ? "Stop voice capture" : "Start voice capture")
+                    }
+                    .padding(Theme.Spacing.cardInset)
+                    .surfaceCard()
+                    .padding(.top, Theme.Spacing.xs)
+
+                    if let error = voiceCapture.errorMessage {
+                        Text(error)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.textSecondary)
+                            .padding(.horizontal, Theme.Spacing.xs)
+                    }
 
                     if canAddToToday {
                         HStack(spacing: Theme.Spacing.sm) {
@@ -59,10 +81,14 @@ struct QuickCaptureSheet: View {
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            .onDisappear {
+                voiceCapture.stop()
+            }
         }
     }
 
     private func add() {
+        voiceCapture.stop()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let state: TaskState = addToToday ? .today : .inbox
@@ -71,5 +97,20 @@ struct QuickCaptureSheet: View {
         try? modelContext.save()
         onAdded?(task, addToToday)
         dismiss()
+    }
+
+    private func toggleVoiceCapture() {
+        voiceSeedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        voiceCapture.toggle { spoken in
+            text = mergedText(base: voiceSeedText, spoken: spoken)
+        }
+    }
+
+    private func mergedText(base: String, spoken: String) -> String {
+        let cleanedBase = base.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedSpoken = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedSpoken.isEmpty else { return cleanedBase }
+        guard !cleanedBase.isEmpty else { return cleanedSpoken }
+        return "\(cleanedBase) \(cleanedSpoken)"
     }
 }
