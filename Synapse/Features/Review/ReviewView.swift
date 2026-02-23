@@ -1,97 +1,185 @@
 import SwiftUI
 import SwiftData
-import Charts
 
 struct ReviewView: View {
+    @Query(sort: [SortDescriptor(\TaskItem.createdAt, order: .forward)])
+    private var tasks: [TaskItem]
 
     @Query(sort: [SortDescriptor(\FocusSession.startedAt, order: .forward)])
     private var sessions: [FocusSession]
 
-    @Query(sort: [SortDescriptor(\TaskItem.completedAt, order: .forward)])
-    private var tasks: [TaskItem]
+    @Query(sort: [SortDescriptor(\Habit.createdAt, order: .forward)])
+    private var habits: [Habit]
 
-    @Query private var habits: [Habit]
+    @State private var mode: ReviewMode = .daily
 
     private var calendar: Calendar { .current }
-
-    // MARK: - Calendar Week (Mon–Sun)
-    private var weekRange: DateInterval {
-        let now = Date()
-        let weekOfYear = calendar.component(.weekOfYear, from: now)
-        let yearForWeek = calendar.component(.yearForWeekOfYear, from: now)
-
-        var components = DateComponents()
-        components.calendar = calendar
-        components.yearForWeekOfYear = yearForWeek
-        components.weekOfYear = weekOfYear
-        components.weekday = 2
-
-        let start = calendar.date(from: components)!
-
-        let end = calendar.date(byAdding: .day, value: 7, to: start)!
-        return DateInterval(start: start, end: end)
+    private var todayStart: Date { calendar.startOfDay(for: .now) }
+    private var monthStart: Date {
+        calendar.date(from: calendar.dateComponents([.year, .month], from: todayStart)) ?? todayStart
     }
 
-    private var weekSessions: [FocusSession] {
-        sessions.filter { weekRange.contains($0.startedAt) }
+    private enum ReviewMode: String, CaseIterable, Identifiable {
+        case daily = "Daily"
+        case monthly = "Monthly"
+
+        var id: String { rawValue }
     }
 
-    // Robust duration: handles old sessions with durationSeconds = 0
-    private func sessionSeconds(_ s: FocusSession) -> Int {
-        if s.durationSeconds > 0 { return s.durationSeconds }
-        if let end = s.endedAt {
-            let delta = Int(end.timeIntervalSince(s.startedAt))
-            return max(0, delta)
+    private var activeHabits: [Habit] {
+        habits.filter(\.isActive)
+    }
+
+    private var completedHabitsToday: Int {
+        activeHabits.filter(\.completedToday).count
+    }
+
+    private var dailyAssignedTasks: [TaskItem] {
+        tasks.filter { task in
+            task.state == .today || task.state == .completed
         }
-        return 0
-    }
-
-    private var focusSecondsThisWeek: Int {
-        weekSessions.reduce(0) { $0 + sessionSeconds($1) }
-    }
-
-    private var sessionsCountThisWeek: Int {
-        weekSessions.filter { sessionSeconds($0) > 0 }.count
-    }
-
-    private var tasksClearedThisWeek: Int {
-        tasks.filter {
-            $0.state == .completed &&
-            ($0.completedAt.map { weekRange.contains($0) } ?? false)
-        }.count
-    }
-
-    private var habitDaysThisWeek: Int {
-        let dates = habits.compactMap { $0.lastCompletedDate }
-            .filter { weekRange.contains($0) }
-        let uniqueDays = Set(dates.map { calendar.startOfDay(for: $0) })
-        return uniqueDays.count
-    }
-
-    // MARK: - Daily Focus (Mon..Sun)
-    struct DayFocus: Identifiable {
-        let id = UUID()
-        let date: Date
-        let minutes: Int
-    }
-
-    private var dailyFocus: [DayFocus] {
-        (0..<7).map { offset in
-            let day = calendar.date(byAdding: .day, value: offset, to: weekRange.start)!
-            let next = calendar.date(byAdding: .day, value: 1, to: day)!
-
-            let mins = sessions
-                .filter { $0.startedAt >= day && $0.startedAt < next }
-                .reduce(0) { $0 + sessionSeconds($1) } / 60
-
-            return DayFocus(date: day, minutes: mins)
+        .filter { task in
+            calendar.isDate(assignmentDay(for: task), inSameDayAs: todayStart)
         }
     }
 
-    private var bestDay: DayFocus? {
-        let best = dailyFocus.max(by: { $0.minutes < $1.minutes })
-        guard let best, best.minutes > 0 else { return nil }
+    private var dailyCompletedTasks: [TaskItem] {
+        tasks.filter { task in
+            task.state == .completed && calendar.isDate(assignmentDay(for: task), inSameDayAs: todayStart)
+        }
+    }
+
+    private var dailyCompletionPercent: Int {
+        guard !dailyAssignedTasks.isEmpty else { return 0 }
+        let raw = (Double(dailyCompletedTasks.count) / Double(dailyAssignedTasks.count)) * 100
+        return Int(raw.rounded())
+    }
+
+    private var dailyRitualConsistency: Int {
+        guard !activeHabits.isEmpty else { return 0 }
+        let raw = (Double(completedHabitsToday) / Double(activeHabits.count)) * 100
+        return Int(raw.rounded())
+    }
+
+    private var dailyFocusSeconds: Int {
+        let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? .distantFuture
+        return sessions
+            .filter { $0.startedAt >= todayStart && $0.startedAt < end }
+            .reduce(0) { $0 + $1.durationSeconds }
+    }
+
+    private var dailyInsightLine: String {
+        if dailyCompletionPercent >= 80 && dailyRitualConsistency >= 80 {
+            return "Strong execution day. Keep tomorrow equally simple."
+        }
+        if dailyCompletedTasks.isEmpty {
+            return "One completed task creates momentum faster than planning more."
+        }
+        if dailyRitualConsistency < 50 {
+            return "Ritual consistency is the easiest lever to stabilize execution."
+        }
+        return "Progress is steady. Protect focus blocks and keep priorities tight."
+    }
+
+    private var monthDays: [Date?] {
+        guard let range = calendar.range(of: .day, in: .month, for: monthStart) else { return [] }
+
+        let firstWeekday = calendar.component(.weekday, from: monthStart)
+        let leading = (firstWeekday - calendar.firstWeekday + 7) % 7
+
+        var cells: [Date?] = Array(repeating: nil, count: leading)
+        for day in range {
+            if let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart) {
+                cells.append(date)
+            }
+        }
+
+        while cells.count % 7 != 0 {
+            cells.append(nil)
+        }
+        return cells
+    }
+
+    private var weekdaySymbolsOrdered: [String] {
+        let symbols = calendar.veryShortWeekdaySymbols
+        let start = max(0, min(symbols.count - 1, calendar.firstWeekday - 1))
+        return Array(symbols[start...]) + Array(symbols[..<start])
+    }
+
+    private var monthTaskSummaries: [Date: (assigned: Int, completed: Int)] {
+        let monthEnd = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? .distantFuture
+        let monthTasks = tasks.filter { task in
+            let day = assignmentDay(for: task)
+            return day >= monthStart && day < monthEnd && (task.state == .today || task.state == .completed)
+        }
+
+        return Dictionary(grouping: monthTasks) { task in
+            assignmentDay(for: task)
+        }
+        .mapValues { items in
+            let assigned = items.count
+            let completed = items.filter { $0.state == .completed }.count
+            return (assigned, completed)
+        }
+    }
+
+    private var monthlyBestStreak: Int {
+        let completionDays = monthTaskSummaries
+            .filter { _, summary in summary.completed > 0 }
+            .keys
+            .sorted()
+
+        guard !completionDays.isEmpty else { return 0 }
+
+        var best = 1
+        var run = 1
+        for index in 1..<completionDays.count {
+            let previous = completionDays[index - 1]
+            let expected = calendar.date(byAdding: .day, value: 1, to: previous) ?? previous
+            if calendar.isDate(completionDays[index], inSameDayAs: expected) {
+                run += 1
+                best = max(best, run)
+            } else {
+                run = 1
+            }
+        }
         return best
+    }
+
+    private var monthlyAverageExecutionPercent: Int {
+        let values = monthTaskSummaries.values.compactMap { summary -> Double? in
+            guard summary.assigned > 0 else { return nil }
+            return Double(summary.completed) / Double(summary.assigned)
+        }
+
+        guard !values.isEmpty else { return 0 }
+        let avg = values.reduce(0, +) / Double(values.count)
+        return Int((avg * 100).rounded())
+    }
+
+    private var monthlyWeekdayStrength: (strongest: String, weakest: String)? {
+        let groupedByWeekday = Dictionary(grouping: monthTaskSummaries) { entry in
+            calendar.component(.weekday, from: entry.key)
+        }
+
+        let averages: [(weekday: Int, score: Double)] = groupedByWeekday.map { weekday, entries in
+            let values = entries.compactMap { _, summary -> Double? in
+                guard summary.assigned > 0 else { return nil }
+                return Double(summary.completed) / Double(summary.assigned)
+            }
+            let average = values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
+            return (weekday, average)
+        }
+
+        guard let strongest = averages.max(by: { $0.score < $1.score }),
+              let weakest = averages.min(by: { $0.score < $1.score }) else {
+            return nil
+        }
+
+        let strongestName = calendar.weekdaySymbols[max(0, min(calendar.weekdaySymbols.count - 1, strongest.weekday - 1))]
+        let weakestName = calendar.weekdaySymbols[max(0, min(calendar.weekdaySymbols.count - 1, weakest.weekday - 1))]
+
+        return (strongestName, weakestName)
     }
 
     var body: some View {
@@ -99,14 +187,14 @@ struct ReviewView: View {
             ScreenCanvas {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                        modePicker
 
-                        header
-
-                        focusChartCard
-
-                        kpiGrid
-
-                        highlightsCard
+                        switch mode {
+                        case .daily:
+                            dailyReview
+                        case .monthly:
+                            monthlyReview
+                        }
 
                         Spacer(minLength: Theme.Spacing.lg)
                     }
@@ -118,184 +206,142 @@ struct ReviewView: View {
         }
     }
 
-    // MARK: - UI
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("This Week")
-                .font(Theme.Typography.titleLarge)
-                .foregroundStyle(Theme.text)
-
-            Text(formattedWeekRange())
-                .font(Theme.Typography.bodySmall)
-                .foregroundStyle(Theme.textSecondary)
+    private var modePicker: some View {
+        Picker("Review mode", selection: $mode) {
+            ForEach(ReviewMode.allCases) { option in
+                Text(option.rawValue).tag(option)
+            }
         }
-        .padding(.top, Theme.Spacing.compact)
+        .pickerStyle(.segmented)
     }
 
-    private var focusChartCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionLabel(icon: "timer", title: "Focus")
+    private var dailyReview: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            metricRow(label: "Completion %", value: "\(dailyCompletionPercent)%")
+            metricRow(label: "Ritual consistency", value: "\(dailyRitualConsistency)%")
+            metricRow(label: "Task throughput", value: "\(dailyCompletedTasks.count)")
+            metricRow(label: "Focus time", value: formatMinutes(dailyFocusSeconds))
 
-                Spacer()
+            Text(dailyInsightLine)
+                .font(Theme.Typography.bodySmall)
+                .foregroundStyle(Theme.textSecondary)
+                .padding(.top, Theme.Spacing.xs)
+        }
+        .padding(Theme.Spacing.cardInset)
+        .surfaceCard()
+    }
 
-                Text(formatFocusFromSeconds(focusSecondsThisWeek))
-                    .font(Theme.Typography.bodyMedium.weight(.semibold))
-                    .foregroundStyle(Theme.text)
-                    .contentTransition(.numericText())
-            }
+    private var monthlyReview: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text(monthStart.formatted(.dateTime.month(.wide).year()))
+                .font(Theme.Typography.bodySmallStrong)
+                .foregroundStyle(Theme.text)
 
-            Chart(dailyFocus) { item in
-                let isBest = bestDay.map { $0.minutes > 0 && isSameDay($0.date, item.date) } ?? false
+            monthHeatmap
 
-                BarMark(
-                    x: .value("Day", shortWeekday(item.date)),
-                    y: .value("Minutes", item.minutes)
-                )
-                .cornerRadius(4)
-                .opacity(isBest ? 1.0 : (item.minutes == 0 ? 0.18 : 0.55))
-                .foregroundStyle(isBest ? Theme.accent2 : Theme.accent)
+            metricRow(label: "Best streak", value: "\(monthlyBestStreak) day\(monthlyBestStreak == 1 ? "" : "s")")
+            metricRow(label: "Avg execution %", value: "\(monthlyAverageExecutionPercent)%")
 
-                if isBest {
-                    PointMark(
-                        x: .value("Day", shortWeekday(item.date)),
-                        y: .value("Minutes", item.minutes)
-                    )
-                    .symbolSize(30)
-                    .opacity(0.9)
-                    .foregroundStyle(Theme.accent2)
-                }
-            }
-            .chartYScale(domain: 0...(max(dailyFocus.map(\.minutes).max() ?? 0, 10)))
-            .chartYAxis(.hidden)
-            .chartXAxis {
-                AxisMarks(values: dailyFocus.map { shortWeekday($0.date) }) { _ in
-                    AxisValueLabel()
-                        .foregroundStyle(Theme.textSecondary)
-                }
-            }
-            .frame(height: 152)
-
-            if let bestDay {
-                Text("Peak: \(weekday(bestDay.date))")
+            if let weekdayStrength = monthlyWeekdayStrength {
+                metricRow(label: "Strongest weekday", value: weekdayStrength.strongest)
+                metricRow(label: "Weakest weekday", value: weekdayStrength.weakest)
+            } else {
+                Text("Not enough monthly data yet.")
                     .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
-                    .padding(.top, Theme.Spacing.xxs)
             }
         }
         .padding(Theme.Spacing.cardInset)
-        .background(
-            Theme.focusGradient.opacity(0.2),
-            in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                .stroke(Theme.accent.opacity(0.14), lineWidth: 1)
-        }
         .surfaceCard()
-        .shadow(color: Theme.cardShadow().opacity(0.85), radius: 14, y: 8)
     }
 
-    private var kpiGrid: some View {
-        VStack(spacing: Theme.Spacing.sm) {
-            HStack(spacing: Theme.Spacing.sm) {
-                kpiCard(value: formatFocusFromSeconds(focusSecondsThisWeek), label: "Focus Time")
-                kpiCard(value: "\(sessionsCountThisWeek)", label: "Sessions")
+    private var monthHeatmap: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.xxs), count: 7), spacing: Theme.Spacing.xxs) {
+                ForEach(weekdaySymbolsOrdered, id: \.self) { symbol in
+                    Text(symbol)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(maxWidth: .infinity)
+                }
+
+                ForEach(Array(monthDays.enumerated()), id: \.offset) { _, day in
+                    if let day {
+                        heatmapCell(for: day)
+                    } else {
+                        Color.clear
+                            .frame(height: 32)
+                    }
+                }
             }
+
             HStack(spacing: Theme.Spacing.sm) {
-                kpiCard(value: "\(tasksClearedThisWeek)", label: "Tasks Cleared")
-                kpiCard(value: "\(habitDaysThisWeek) / 7", label: "Habit Days")
+                Text("Less")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.textSecondary)
+
+                HStack(spacing: Theme.Spacing.xxs) {
+                    ForEach(0..<4, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Theme.accent.opacity(0.12 + (CGFloat(index) * 0.2)))
+                            .frame(width: 18, height: 10)
+                    }
+                }
+
+                Text("More")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.textSecondary)
             }
         }
     }
 
-    private func kpiCard(value: String, label: String) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-            Text(value)
-                .font(Theme.Typography.statValue)
-                .foregroundStyle(Theme.text)
-                .contentTransition(.numericText())
+    private func heatmapCell(for day: Date) -> some View {
+        let summary = monthTaskSummaries[calendar.startOfDay(for: day), default: (assigned: 0, completed: 0)]
+        let ratio: CGFloat
+        if summary.assigned == 0 {
+            ratio = 0
+        } else {
+            ratio = CGFloat(summary.completed) / CGFloat(summary.assigned)
+        }
 
+        return ZStack {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(summary.assigned == 0 ? Theme.surface2 : Theme.accent.opacity(0.12 + (0.58 * ratio)))
+
+            Text(day.formatted(.dateTime.day()))
+                .font(Theme.Typography.caption.weight(.semibold))
+                .foregroundStyle(Theme.text)
+        }
+        .frame(height: 32)
+    }
+
+    private func metricRow(label: String, value: String) -> some View {
+        HStack {
             Text(label)
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
+
+            Spacer(minLength: 0)
+
+            Text(value)
+                .font(Theme.Typography.bodySmallStrong)
+                .foregroundStyle(Theme.text)
+                .contentTransition(.numericText())
         }
-        .padding(Theme.Spacing.cardInset)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
     }
 
-    private var highlightsCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            if let bestDay {
-                HStack(spacing: Theme.Spacing.xs) {
-                    ZStack(alignment: .topTrailing) {
-                        StatusChip(text: "Best day", icon: "star.fill", tone: .accent2)
-                        SparkleOverlay()
-                    }
-                    Spacer(minLength: 0)
-                }
-
-                Text("Best day: \(weekday(bestDay.date)) — \(formatMinutes(bestDay.minutes))")
-                    .font(Theme.Typography.bodyMedium.weight(.semibold))
-                    .foregroundStyle(Theme.text)
-            } else {
-                HStack(alignment: .top, spacing: Theme.Spacing.sm) {
-                    Illustration(symbol: "chart.bar", style: .line, size: 28)
-
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                            SectionLabel(icon: "sparkles", title: "Highlights")
-
-                            Text("No focus logged yet this week.")
-                                .font(Theme.Typography.itemTitle)
-                                .foregroundStyle(Theme.text)
-                        }
-
-                    Spacer(minLength: 0)
-                }
-            }
+    private func assignmentDay(for task: TaskItem) -> Date {
+        if let assigned = task.assignedDate {
+            return calendar.startOfDay(for: assigned)
         }
-        .padding(Theme.Spacing.cardInset)
-        .surfaceCard()
+        return calendar.startOfDay(for: task.createdAt)
     }
 
-    // MARK: - Formatting
-
-    private func formattedWeekRange() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        let start = formatter.string(from: weekRange.start)
-        let end = formatter.string(from: calendar.date(byAdding: .day, value: -1, to: weekRange.end)!)
-        return "\(start) – \(end)"
-    }
-
-    private func weekday(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "EEEE"
-        return f.string(from: date)
-    }
-
-    private func shortWeekday(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "E"
-        return f.string(from: date)
-    }
-
-    private func isSameDay(_ a: Date, _ b: Date) -> Bool {
-        calendar.isDate(a, inSameDayAs: b)
-    }
-
-    private func formatMinutes(_ minutes: Int) -> String {
+    private func formatMinutes(_ seconds: Int) -> String {
+        let minutes = max(0, seconds) / 60
         if minutes < 60 { return "\(minutes)m" }
-        let h = minutes / 60
-        let m = minutes % 60
-        return "\(h)h \(m)m"
-    }
-    
-    private func formatFocusFromSeconds(_ seconds: Int) -> String {
-        if seconds <= 0 { return "0m" }
-        if seconds < 60 { return "<1m" }
-        return formatMinutes(seconds / 60)
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        return "\(hours)h \(remainder)m"
     }
 }

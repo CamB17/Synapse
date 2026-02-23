@@ -2,7 +2,6 @@ import SwiftUI
 
 struct HabitRow: View {
     let title: String
-    let streakText: String
     let isCompletedToday: Bool
     let showSparkle: Bool
     let onToggle: () -> Void
@@ -34,10 +33,14 @@ struct HabitRow: View {
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
 
-                Text(streakText)
-                    .font(Theme.Typography.bodySmall)
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
+                HStack(spacing: Theme.Spacing.xxs) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.textSecondary.opacity(0.7))
+                    Text("Recurring")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.textSecondary.opacity(0.75))
+                }
             }
 
             Spacer()
