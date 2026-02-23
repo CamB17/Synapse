@@ -22,7 +22,10 @@ struct InboxView: View {
 
     private let todayCap = 5
     private var todayAssignedCount: Int {
-        todayTasks.filter { Calendar.current.isDateInToday($0.createdAt) }.count
+        todayTasks.filter { task in
+            guard let assignedDate = task.assignedDate else { return false }
+            return Calendar.current.isDateInToday(assignedDate)
+        }.count
     }
 
     var body: some View {
@@ -41,9 +44,14 @@ struct InboxView: View {
                             Section {
                                 ForEach(inbox) { item in
                                     HStack(spacing: Theme.Spacing.xs) {
+                                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                            .fill(priorityTone(for: item.priority))
+                                            .frame(width: 3, height: 28)
+
                                         Text(item.title)
-                                            .font(Theme.Typography.itemTitle)
+                                            .font(item.priority == .high ? Theme.Typography.itemTitle : Theme.Typography.itemTitleCompact)
                                             .foregroundStyle(Theme.text)
+                                            .opacity(item.priority == .low ? 0.8 : 1)
                                             .frame(maxWidth: .infinity, alignment: .leading)
 
                                         Button {
@@ -181,7 +189,8 @@ struct InboxView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
             withAnimation(.snappy(duration: 0.22)) {
                 item.state = .today
-                item.createdAt = .now
+                item.assignedDate = Calendar.current.startOfDay(for: .now)
+                item.carriedOverFrom = nil
                 onCommitToToday?()
             }
             try? modelContext.save()
@@ -192,5 +201,16 @@ struct InboxView: View {
     private func delete(_ item: TaskItem) {
         modelContext.delete(item)
         try? modelContext.save()
+    }
+
+    private func priorityTone(for priority: TaskPriority) -> Color {
+        switch priority {
+        case .high:
+            return Theme.accent.opacity(0.7)
+        case .medium:
+            return Theme.textSecondary.opacity(0.35)
+        case .low:
+            return Theme.textSecondary.opacity(0.18)
+        }
     }
 }

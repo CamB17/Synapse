@@ -17,6 +17,7 @@ struct HabitBlock: View {
     @State private var showingManage = false
     @State private var pulseId: UUID?
     @State private var sparkleId: UUID?
+    @State private var showCompletedRituals = false
     var onCompletionStateChange: ((HabitCompletionSnapshot) -> Void)? = nil
 
     private var activeHabits: [Habit] {
@@ -27,17 +28,8 @@ struct HabitBlock: View {
         activeHabits.filter { !$0.completedToday }
     }
 
-    private var reminderText: String {
-        guard let first = pendingHabits.first else { return "" }
-        let remaining = pendingHabits.count - 1
-        if remaining > 0 {
-            return "Don't forget: \(first.title) +\(remaining) more"
-        }
-        return "Don't forget: \(first.title)"
-    }
-    
-    private var showHabitsCompleteLine: Bool {
-        activeHabits.count >= 2 && pendingHabits.isEmpty
+    private var hasCompletedAll: Bool {
+        !activeHabits.isEmpty && pendingHabits.isEmpty
     }
 
     private var showsOverflowCue: Bool {
@@ -51,7 +43,7 @@ struct HabitBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(alignment: .firstTextBaseline) {
-                SectionLabel(icon: "leaf", title: "Daily Rituals")
+                SectionLabel(icon: "leaf", title: "Rituals")
 
                 Spacer()
 
@@ -66,32 +58,29 @@ struct HabitBlock: View {
                 .accessibilityLabel("Manage habits")
             }
 
-            if !pendingHabits.isEmpty {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Image(systemName: "bell.badge")
-                        .font(Theme.Typography.iconSmall)
-                        .foregroundStyle(Theme.textSecondary)
+            if hasCompletedAll {
+                Button {
+                    withAnimation(.snappy(duration: 0.18)) {
+                        showCompletedRituals.toggle()
+                    }
+                } label: {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Image(systemName: "checkmark.circle")
+                            .font(Theme.Typography.iconSmall)
+                            .foregroundStyle(Theme.success)
 
-                    Text(reminderText)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
+                        Text(showCompletedRituals ? "Hide completed rituals" : "All rituals complete")
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.textSecondary)
 
-                    Spacer(minLength: 0)
+                        Spacer(minLength: 0)
+
+                        Image(systemName: showCompletedRituals ? "chevron.up" : "chevron.down")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.textSecondary.opacity(0.8))
+                    }
                 }
-                .padding(.bottom, Theme.Spacing.xxxs)
-            } else if showHabitsCompleteLine {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Image(systemName: "checkmark.circle")
-                        .font(Theme.Typography.iconSmall)
-                        .foregroundStyle(Theme.accent)
-                    
-                    Text("Habits complete today.")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                    
-                    Spacer(minLength: 0)
-                }
+                .buttonStyle(.plain)
                 .padding(.bottom, Theme.Spacing.xxxs)
             }
 
@@ -101,47 +90,48 @@ struct HabitBlock: View {
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.vertical, Theme.Spacing.xxs)
             } else {
-                ZStack(alignment: .bottom) {
-                    ScrollView(.vertical) {
-                        VStack(spacing: Theme.Spacing.hairline) {
-                            ForEach(activeHabits) { habit in
-                                HabitRow(
-                                    title: habit.title,
-                                    streakText: streakText(for: habit),
-                                    isCompletedToday: habit.completedToday,
-                                    showSparkle: sparkleId == habit.id
-                                ) {
-                                    toggle(habit)
+                if !hasCompletedAll || showCompletedRituals {
+                    ZStack(alignment: .bottom) {
+                        ScrollView(.vertical) {
+                            VStack(spacing: Theme.Spacing.hairline) {
+                                ForEach(activeHabits) { habit in
+                                    HabitRow(
+                                        title: habit.title,
+                                        isCompletedToday: habit.completedToday,
+                                        showSparkle: sparkleId == habit.id
+                                    ) {
+                                        toggle(habit)
+                                    }
+                                    .opacity(habit.completedToday ? 0.72 : 1.0)
+                                    .scaleEffect(pulseId == habit.id ? 1.01 : 1.0)
+                                    .animation(.snappy(duration: 0.16), value: pulseId)
                                 }
-                                .opacity(habit.completedToday ? 0.65 : 1.0)
-                                .scaleEffect(pulseId == habit.id ? 1.01 : 1.0)
-                                .animation(.snappy(duration: 0.16), value: pulseId)
                             }
                         }
-                    }
-                    .scrollIndicators(.hidden)
+                        .scrollIndicators(.hidden)
 
-                    if showsOverflowCue {
-                        LinearGradient(
-                            colors: [Theme.surface2.opacity(0), Theme.surface2.opacity(0.96)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: 34)
-                        .allowsHitTesting(false)
+                        if showsOverflowCue {
+                            LinearGradient(
+                                colors: [Theme.surface2.opacity(0), Theme.surface2.opacity(0.96)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 34)
+                            .allowsHitTesting(false)
 
-                        HStack(spacing: Theme.Spacing.xxs) {
-                            Image(systemName: "chevron.down")
-                                .font(Theme.Typography.iconSmall)
-                            Text("Scroll for \(overflowCount) more")
-                                .font(Theme.Typography.caption.weight(.semibold))
+                            HStack(spacing: Theme.Spacing.xxs) {
+                                Image(systemName: "chevron.down")
+                                    .font(Theme.Typography.iconSmall)
+                                Text("Scroll for \(overflowCount) more")
+                                    .font(Theme.Typography.caption.weight(.semibold))
+                            }
+                            .foregroundStyle(Theme.textSecondary)
+                            .padding(.bottom, Theme.Spacing.xxxs)
+                            .allowsHitTesting(false)
                         }
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(.bottom, Theme.Spacing.xxxs)
-                        .allowsHitTesting(false)
                     }
+                    .frame(maxHeight: showsOverflowCue ? 180 : .infinity)
                 }
-                .frame(maxHeight: showsOverflowCue ? 180 : .infinity)
             }
         }
         .padding(Theme.Spacing.sm)
@@ -193,21 +183,8 @@ struct HabitBlock: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             if sparkleId == habit.id { sparkleId = nil }
         }
-    }
-
-    private func streakText(for habit: Habit) -> String {
-        if habit.currentStreak <= 0 {
-            return "Not started"
+        if hasCompletedAll {
+            showCompletedRituals = false
         }
-        if habit.completedToday {
-            return "\(habit.currentStreak) day streak"
-        }
-
-        if let last = habit.lastCompletedDate,
-           !Calendar.current.isDateInYesterday(last) {
-            return "Paused at \(habit.currentStreak) days"
-        }
-
-        return "\(habit.currentStreak) day streak"
     }
 }
