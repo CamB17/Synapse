@@ -47,6 +47,8 @@ struct TodayView: View {
     @State private var showingFocusToast = false
     @State private var focusToastWorkItem: DispatchWorkItem?
     @State private var daySyncAnchor = Calendar.current.startOfDay(for: .now)
+    @State private var animatedCompletionRatio: CGFloat = 0
+    @State private var headerProgressPulse = false
     private let partOfDayTicker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     private enum FocusTimeFilter: String, CaseIterable {
@@ -185,10 +187,10 @@ struct TodayView: View {
         }.count
     }
 
-    private var completionPercent: Int {
+    private var completionRatio: CGFloat {
         guard todayCap > 0 else { return 0 }
-        let raw = (Double(completedSelectedDayCount) / Double(todayCap)) * 100
-        return max(0, min(100, Int(raw.rounded())))
+        let ratio = CGFloat(completedSelectedDayCount) / CGFloat(todayCap)
+        return max(0, min(1, ratio))
     }
 
     private var momentumDelta: Int {
@@ -205,15 +207,29 @@ struct TodayView: View {
         return "Momentum → 0 this week"
     }
 
-    private var momentumInsightLine: String? {
-        let streak = completionStreakEnding(at: selectedDayStart)
-        if streak > 3 {
-            return "Momentum building."
+    private var currentStreak: Int {
+        completionStreakEnding(at: todayStart)
+    }
+
+    private var headerMomentumLine: String {
+        if currentStreak > 0 {
+            return "Momentum → \(currentStreak) day streak"
         }
-        if calendar.isDateInToday(selectedDayStart), streak == 0, weeklyCompletedCount(offsetWeeks: 0) > 0 {
-            return "Reset today with one win."
+        return momentumLine
+    }
+
+    private var motivationLine: String {
+        completedSelectedDayCount > 0 ? "Keep it going." : "Start your first win."
+    }
+
+    private var momentumStripDays: [Date] {
+        (-6...0).compactMap { offset in
+            calendar.date(byAdding: .day, value: offset, to: todayStart)
         }
-        return nil
+    }
+
+    private var maxMomentumStripCompletions: Int {
+        max(1, momentumStripDays.map { daySummary(for: $0).completedCount }.max() ?? 0)
     }
 
     private var totalFocusSecondsSelectedDay: Int {
@@ -285,6 +301,7 @@ struct TodayView: View {
                 synchronizeDayState()
                 synchronizeFocusFilterWithCurrentPartOfDay(force: true)
                 hideBottomNavigation = isFocusMode
+                animatedCompletionRatio = completionRatio
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
@@ -322,6 +339,18 @@ struct TodayView: View {
                     focusActiveTaskID = highPriorityTasks.first?.id
                 }
             }
+            .onChange(of: completedSelectedDayCount) { oldValue, newValue in
+                guard oldValue != newValue else { return }
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                    animatedCompletionRatio = completionRatio
+                }
+                withAnimation(.snappy(duration: 0.18)) {
+                    headerProgressPulse = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                    headerProgressPulse = false
+                }
+            }
             .onDisappear {
                 focusTimer?.invalidate()
                 focusTimer = nil
@@ -334,7 +363,29 @@ struct TodayView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            ZStack(alignment: .leading) {
+                Capsule(style: .continuous)
+                    .fill(Theme.surface2.opacity(0.92))
+
+                GeometryReader { proxy in
+                    Capsule(style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Theme.accent.opacity(0.95),
+                                    Theme.accent2.opacity(0.86)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: max(0, proxy.size.width * animatedCompletionRatio))
+                }
+            }
+            .frame(height: 6)
+            .animation(.spring(response: 0.34, dampingFraction: 0.82), value: animatedCompletionRatio)
+
             HStack(alignment: .firstTextBaseline) {
                 Text("Today")
                     .font(Theme.Typography.titleLarge)
@@ -367,29 +418,24 @@ struct TodayView: View {
             }
             .padding(.bottom, Theme.Spacing.xxxs)
 
-            Text("\(completionPercent)%")
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundStyle(Theme.text)
-                .contentTransition(.numericText())
-
             Text("\(completedSelectedDayCount) of \(todayCap) complete")
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
                 .contentTransition(.numericText())
 
-            Text(momentumLine)
+            Text(headerMomentumLine)
                 .font(.system(size: 11, weight: .medium, design: .rounded))
                 .foregroundStyle(Theme.textSecondary.opacity(0.78))
                 .contentTransition(.numericText())
 
-            if let momentumInsightLine {
-                Text(momentumInsightLine)
-                    .font(.system(size: 11, weight: .regular, design: .rounded))
-                    .foregroundStyle(Theme.textSecondary.opacity(0.72))
-            }
+            Text(motivationLine)
+                .font(.system(size: 11, weight: .regular, design: .rounded))
+                .foregroundStyle(Theme.textSecondary.opacity(0.8))
+                .contentTransition(.numericText())
         }
         .padding(.horizontal, Theme.Spacing.cardInset)
         .padding(.vertical, 10)
+        .scaleEffect(headerProgressPulse ? 1.01 : 1, anchor: .top)
         .background(
             headerBackground,
             in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
@@ -399,6 +445,8 @@ struct TodayView: View {
 
     private var calendarRail: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            momentumStrip
+
             HStack {
                 Text(currentMonthLabel)
                     .font(Theme.Typography.caption)
@@ -417,6 +465,21 @@ struct TodayView: View {
             }
         }
         .animation(.snappy(duration: 0.22), value: calendarMode)
+    }
+
+    private var momentumStrip: some View {
+        HStack(alignment: .bottom, spacing: 4) {
+            ForEach(momentumStripDays, id: \.self) { day in
+                let completed = daySummary(for: day).completedCount
+                let normalized = CGFloat(completed) / CGFloat(maxMomentumStripCompletions)
+
+                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                    .fill(Theme.accent.opacity(completed == 0 ? 0.12 : 0.24 + (0.32 * normalized)))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 6 + (18 * normalized))
+            }
+        }
+        .frame(height: 26)
     }
 
     private var calendarModeControl: some View {
@@ -729,12 +792,12 @@ struct TodayView: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Theme.surface,
-                    Theme.surface2.opacity(0.94),
-                    Theme.accent.opacity(0.07)
+                    Theme.accent.opacity(0.24),
+                    Theme.surface.opacity(0.97),
+                    Theme.surface2.opacity(0.93)
                 ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                startPoint: .top,
+                endPoint: .bottom
             )
             .ignoresSafeArea()
 
@@ -753,11 +816,25 @@ struct TodayView: View {
                     .lineLimit(3)
                     .frame(maxWidth: 340)
 
-                Text(timeString(focusElapsedSeconds))
-                    .font(.system(size: 72, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.text)
-                    .contentTransition(.numericText())
+                ZStack {
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                        let wave = (sin(context.date.timeIntervalSinceReferenceDate * 2.6) + 1) / 2
+
+                        Circle()
+                            .fill(Theme.accent.opacity(focusIsRunning ? (0.10 + (0.08 * wave)) : 0.0))
+                            .frame(
+                                width: focusIsRunning ? (188 + (20 * wave)) : 188,
+                                height: focusIsRunning ? (188 + (20 * wave)) : 188
+                            )
+                            .blur(radius: focusIsRunning ? 22 : 28)
+                    }
+
+                    Text(timeString(focusElapsedSeconds))
+                        .font(.system(size: 72, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.text)
+                        .contentTransition(.numericText())
+                }
 
                 Button {
                     handleImmersiveFocusPrimaryAction()
