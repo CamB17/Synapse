@@ -7,6 +7,7 @@ struct QuickCaptureSheet: View {
 
     @State private var text: String = ""
     @State private var assignedDate: Date
+    @State private var showingDatePicker = false
     @State private var partOfDay: TaskPartOfDay = .anytime
     @State private var repeatRule: TaskRepeatRule = .none
     @State private var customRepeatText = ""
@@ -73,7 +74,7 @@ struct QuickCaptureSheet: View {
                     }
                 )
             }
-            .navigationTitle("Task")
+            .navigationTitle("Add Task")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
@@ -134,10 +135,10 @@ struct QuickCaptureSheet: View {
                 .foregroundStyle(Theme.textSecondary)
 
             Picker("Time", selection: $partOfDay) {
-                Text("Anytime").tag(TaskPartOfDay.anytime)
-                Text("Morning").tag(TaskPartOfDay.morning)
-                Text("Afternoon").tag(TaskPartOfDay.afternoon)
-                Text("Evening").tag(TaskPartOfDay.evening)
+                Text(TaskPartOfDay.anytime.displayLabel).tag(TaskPartOfDay.anytime)
+                Text(TaskPartOfDay.morning.displayLabel).tag(TaskPartOfDay.morning)
+                Text(TaskPartOfDay.afternoon.displayLabel).tag(TaskPartOfDay.afternoon)
+                Text(TaskPartOfDay.evening.displayLabel).tag(TaskPartOfDay.evening)
             }
             .pickerStyle(.segmented)
         }
@@ -151,10 +152,44 @@ struct QuickCaptureSheet: View {
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
 
-            DatePicker("Date", selection: $assignedDate, displayedComponents: .date)
-                .datePickerStyle(.compact)
-                .labelsHidden()
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: Theme.Spacing.xxs) {
+                quickDateChip(title: "Today", date: calendar.startOfDay(for: .now))
+                quickDateChip(title: "Tomorrow", date: calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: .now)) ?? assignedDayStart)
+                Spacer(minLength: 0)
+            }
+
+            Button {
+                withAnimation(.snappy(duration: 0.2)) {
+                    showingDatePicker.toggle()
+                }
+            } label: {
+                HStack(spacing: Theme.Spacing.xxs) {
+                    Image(systemName: "calendar")
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Theme.textSecondary)
+
+                    Text(assignedDayStart.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year()))
+                        .font(Theme.Typography.bodySmallStrong)
+                        .foregroundStyle(Theme.text)
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: showingDatePicker ? "chevron.up" : "chevron.down")
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Theme.textSecondary.opacity(0.85))
+                }
+                .padding(.horizontal, Theme.Spacing.sm)
+                .padding(.vertical, Theme.Spacing.xs)
+                .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
+            }
+            .buttonStyle(.plain)
+
+            if showingDatePicker {
+                DatePicker("Date", selection: $assignedDate, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .tint(Theme.accent)
+            }
 
             if isDefaultDaySelection && !canAssignDefaultDay {
                 Text("This day is full (max 5). Pick another date.")
@@ -268,7 +303,7 @@ struct QuickCaptureSheet: View {
 
         modelContext.insert(task)
         try? modelContext.save()
-        onAdded?(task, true)
+        onAdded?(task, isDefaultDaySelection)
         dismiss()
     }
 
@@ -320,5 +355,30 @@ struct QuickCaptureSheet: View {
         case .yearly: return "Yearly"
         case .custom: return "Custom"
         }
+    }
+
+    private func quickDateChip(title: String, date: Date) -> some View {
+        let isSelected = calendar.isDate(assignedDayStart, inSameDayAs: calendar.startOfDay(for: date))
+
+        return Button {
+            withAnimation(.snappy(duration: 0.16)) {
+                assignedDate = calendar.startOfDay(for: date)
+            }
+        } label: {
+            Text(title)
+                .font(Theme.Typography.caption.weight(.semibold))
+                .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
+                .padding(.horizontal, Theme.Spacing.sm)
+                .padding(.vertical, Theme.Spacing.xxs)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(isSelected ? Theme.accent.opacity(0.14) : Theme.surface2)
+                )
+                .overlay {
+                    Capsule(style: .continuous)
+                        .stroke(isSelected ? Theme.accent.opacity(0.44) : Theme.textSecondary.opacity(0.16), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
     }
 }

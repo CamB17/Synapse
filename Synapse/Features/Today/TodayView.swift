@@ -1310,7 +1310,7 @@ struct TodayView: View {
                 EmptyStatePanel(
                     symbol: "checklist",
                     title: isTodaySelectedDay ? "No tasks yet" : "No tasks assigned",
-                    subtitle: isTodaySelectedDay ? "Assign from Inbox or capture a task." : "Nothing scheduled for this day."
+                    subtitle: isTodaySelectedDay ? "Use + to schedule your next task." : "Nothing scheduled for this day."
                 )
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
@@ -1743,22 +1743,13 @@ struct TodayView: View {
     }
 
     private func isHabit(_ habit: Habit, activeOn day: Date) -> Bool {
-        let dayStart = calendar.startOfDay(for: day)
-        let createdDay = calendar.startOfDay(for: habit.createdAt)
-        guard dayStart >= createdDay else { return false }
-
-        let periods = habitPausePeriods.filter { $0.habitId == habit.id }
-        if !habit.isActive, periods.allSatisfy({ $0.endDay != nil }), dayStart >= todayStart {
-            return false
-        }
-        for period in periods {
-            let start = calendar.startOfDay(for: period.startDay)
-            let end = calendar.startOfDay(for: period.endDay ?? .distantFuture)
-            if dayStart >= start && dayStart < end {
-                return false
-            }
-        }
-        return true
+        RitualAnalytics.isHabit(
+            habit,
+            activeOn: day,
+            today: todayStart,
+            pausePeriods: habitPausePeriods,
+            calendar: calendar
+        )
     }
 
     private func backfillHabitCompletionsIfNeeded() {

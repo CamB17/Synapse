@@ -34,6 +34,15 @@ enum TaskPartOfDay: String, Codable, CaseIterable {
     case morning
     case afternoon
     case evening
+
+    var displayLabel: String {
+        switch self {
+        case .anytime: return "Anytime"
+        case .morning: return "Morning"
+        case .afternoon: return "Afternoon"
+        case .evening: return "Evening"
+        }
+    }
 }
 
 enum TaskRepeatRule: String, Codable, CaseIterable {

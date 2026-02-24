@@ -1,15 +1,36 @@
 import SwiftUI
 import UIKit
+import SwiftData
 
 struct RootView: View {
     @Namespace private var taskNamespace
+    @Environment(\.modelContext) private var modelContext
     @State private var selectedTab: Tab = .today
     @State private var captureRequestID = 0
     @State private var hideTabBar = false
+    @State private var showingUniversalCapture = false
+    @State private var showingTaskCapture = false
+    @State private var showingRitualCapture = false
+
+    @Query(filter: #Predicate<TaskItem> { $0.stateRaw == "today" })
+    private var todayTasks: [TaskItem]
+    @Query(filter: #Predicate<TaskItem> { $0.stateRaw == "inbox" })
+    private var legacyInboxTasks: [TaskItem]
+    @Query(sort: [SortDescriptor(\Habit.sortOrder, order: .reverse)])
+    private var rituals: [Habit]
+
+    private let todayCap = 5
+    private var calendar: Calendar { .current }
+    private var todayStart: Date { calendar.startOfDay(for: .now) }
+    private var canAssignToday: Bool {
+        todayTasks.filter { task in
+            guard let assignedDate = task.assignedDate else { return false }
+            return calendar.isDate(assignedDate, inSameDayAs: todayStart)
+        }.count < todayCap
+    }
 
     private enum Tab: Hashable {
         case today
-        case inbox
         case rituals
         case review
     }
@@ -23,17 +44,6 @@ struct RootView: View {
             )
             .opacity(selectedTab == .today ? 1 : 0)
             .allowsHitTesting(selectedTab == .today)
-
-            InboxView(
-                taskNamespace: taskNamespace,
-                onCommitToToday: {
-                    withAnimation(.snappy(duration: 0.22)) {
-                        selectedTab = .today
-                    }
-                }
-            )
-            .opacity(selectedTab == .inbox ? 1 : 0)
-            .allowsHitTesting(selectedTab == .inbox)
 
             ManageHabitsView(title: "Rituals", showsDoneButton: false)
                 .opacity(selectedTab == .rituals ? 1 : 0)
@@ -51,13 +61,47 @@ struct RootView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .sheet(isPresented: $showingUniversalCapture) {
+            UniversalCaptureSheet(
+                onAddTask: {
+                    withAnimation(.snappy(duration: 0.18)) {
+                        selectedTab = .today
+                    }
+                    showingTaskCapture = true
+                },
+                onAddRitual: {
+                    withAnimation(.snappy(duration: 0.18)) {
+                        selectedTab = .rituals
+                    }
+                    showingRitualCapture = true
+                },
+                onStartFocus: nil
+            )
+            .presentationDetents([.height(universalCaptureDetentHeight)])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingTaskCapture) {
+            QuickCaptureSheet(
+                placeholder: "Capture something…",
+                canAssignDefaultDay: canAssignToday,
+                defaultAssignmentDay: todayStart,
+                onAdded: { _, _ in }
+            )
+        }
+        .sheet(isPresented: $showingRitualCapture) {
+            RitualEditorSheet(
+                defaultSortOrder: nextRitualSortOrder
+            )
+        }
+        .onAppear {
+            migrateLegacyInboxTasksIfNeeded()
+        }
     }
 
     private var customTabBar: some View {
         VStack(spacing: 0) {
             HStack(spacing: Theme.Spacing.sm) {
                 tabButton(tab: .today, title: "Today", icon: "checklist")
-                tabButton(tab: .inbox, title: "Inbox", icon: "tray")
 
                 addCaptureButton
 
@@ -97,13 +141,7 @@ struct RootView: View {
         Button {
             let haptic = UIImpactFeedbackGenerator(style: .medium)
             haptic.impactOccurred()
-
-            withAnimation(.snappy(duration: 0.18)) {
-                selectedTab = .today
-            }
-            DispatchQueue.main.async {
-                captureRequestID += 1
-            }
+            showingUniversalCapture = true
         } label: {
             Image(systemName: "plus")
                 .font(Theme.Typography.iconMedium)
@@ -113,7 +151,33 @@ struct RootView: View {
                 .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Capture task")
+        .accessibilityLabel("Capture")
         .frame(maxWidth: .infinity)
+    }
+
+    private var nextRitualSortOrder: Int {
+        (rituals.map(\.sortOrder).max() ?? -1) + 1
+    }
+
+    private var universalCaptureDetentHeight: CGFloat {
+        276
+    }
+
+    private func migrateLegacyInboxTasksIfNeeded() {
+        guard !legacyInboxTasks.isEmpty else { return }
+
+        for task in legacyInboxTasks {
+            task.state = .today
+            if task.assignedDate == nil {
+                task.assignedDate = todayStart
+            }
+            task.carriedOverFrom = nil
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("Legacy inbox migration error: \(error)")
+        }
     }
 }
