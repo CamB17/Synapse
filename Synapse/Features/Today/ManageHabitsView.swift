@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct ManageHabitsView: View {
-    var title: String = "Habits"
+    var title: String = "Identity"
     var showsDoneButton: Bool = true
 
     @Environment(\.dismiss) private var dismiss
@@ -26,7 +26,7 @@ struct ManageHabitsView: View {
     @State private var reorderMode: EditMode = .inactive
 
     private struct HabitRowMetrics {
-        let monthlyPercent: Int
+        let completionRatePercent: Int
         let completedDays: Int
         let eligibleDays: Int
         let currentStreak: Int
@@ -36,6 +36,9 @@ struct ManageHabitsView: View {
     private var todayStart: Date { calendar.startOfDay(for: .now) }
     private var currentMonthStart: Date {
         calendar.date(from: calendar.dateComponents([.year, .month], from: todayStart)) ?? todayStart
+    }
+    private var thirtyDayWindowStart: Date {
+        calendar.date(byAdding: .day, value: -29, to: todayStart) ?? todayStart
     }
 
     private var activeHabits: [Habit] {
@@ -63,16 +66,9 @@ struct ManageHabitsView: View {
 
     private var monthlyCompletionPercent: Int {
         let totals = activeHabits.reduce(into: (completed: 0, eligible: 0)) { partial, habit in
-            let monthly = HabitAnalytics.monthlyCompletion(
-                for: habit,
-                monthStart: currentMonthStart,
-                completions: completions,
-                pausePeriods: pausePeriods,
-                today: todayStart,
-                calendar: calendar
-            )
-            partial.completed += monthly.completedDays
-            partial.eligible += monthly.eligibleDays
+            let rolling = thirtyDayCompletion(for: habit)
+            partial.completed += rolling.completedDays
+            partial.eligible += rolling.eligibleDays
         }
 
         guard totals.eligible > 0 else { return 0 }
@@ -135,7 +131,7 @@ struct ManageHabitsView: View {
                 .foregroundStyle(Theme.textSecondary)
 
             metricRow(label: "Best streak (month)", value: "\(bestMonthlyStreak) day\(bestMonthlyStreak == 1 ? "" : "s")")
-            metricRow(label: "Monthly completion", value: "\(monthlyCompletionPercent)%")
+            metricRow(label: "30-day completion", value: "\(monthlyCompletionPercent)%")
         }
         .padding(Theme.Spacing.cardInset)
         .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
@@ -196,10 +192,10 @@ struct ManageHabitsView: View {
                         .foregroundStyle(Theme.text)
                         .lineLimit(1)
 
-                    Text("\(habit.frequencySummary) • \(habit.timeOfDay.displayLabel)")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
+                    HStack(spacing: Theme.Spacing.xxs) {
+                        metadataBadge(habit.frequencySummary)
+                        metadataBadge(habit.timeOfDay.displayLabel)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -208,7 +204,7 @@ struct ManageHabitsView: View {
                     Text("\(metrics.currentStreak)d")
                         .font(Theme.Typography.bodySmallStrong)
                         .foregroundStyle(Theme.text)
-                    Text("\(metrics.monthlyPercent)%")
+                    Text("\(metrics.completionRatePercent)%")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.textSecondary)
                 }
@@ -228,7 +224,7 @@ struct ManageHabitsView: View {
                 }
             }
 
-            Text("\(metrics.completedDays) / \(metrics.eligibleDays) eligible days this month")
+            Text("\(metrics.completedDays) / \(metrics.eligibleDays) eligible days in the last 30 days")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.textSecondary.opacity(0.78))
         }
@@ -292,25 +288,34 @@ struct ManageHabitsView: View {
         .surfaceCard(cornerRadius: Theme.radiusSmall)
     }
 
+    private func metadataBadge(_ text: String) -> some View {
+        Text(text)
+            .font(Theme.Typography.caption.weight(.semibold))
+            .foregroundStyle(Theme.textSecondary)
+            .padding(.horizontal, Theme.Spacing.xxs)
+            .padding(.vertical, 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Theme.surface2.opacity(0.9))
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(Theme.textSecondary.opacity(0.14), lineWidth: 0.8)
+            }
+    }
+
     private var activeListHeight: CGFloat {
         let rowHeight: CGFloat = 134
         return max(120, min(CGFloat(activeHabits.count) * rowHeight, 520))
     }
 
     private func metrics(for habit: Habit) -> HabitRowMetrics {
-        let monthly = HabitAnalytics.monthlyCompletion(
-            for: habit,
-            monthStart: currentMonthStart,
-            completions: completions,
-            pausePeriods: pausePeriods,
-            today: todayStart,
-            calendar: calendar
-        )
+        let rolling = thirtyDayCompletion(for: habit)
 
         return HabitRowMetrics(
-            monthlyPercent: monthly.percent,
-            completedDays: monthly.completedDays,
-            eligibleDays: monthly.eligibleDays,
+            completionRatePercent: rolling.percent,
+            completedDays: rolling.completedDays,
+            eligibleDays: rolling.eligibleDays,
             currentStreak: HabitAnalytics.currentStreak(
                 for: habit,
                 completions: completions,
@@ -319,6 +324,36 @@ struct ManageHabitsView: View {
                 calendar: calendar
             )
         )
+    }
+
+    private func thirtyDayCompletion(for habit: Habit) -> (completedDays: Int, eligibleDays: Int, percent: Int) {
+        let completedDays = HabitAnalytics.completionDays(for: habit.id, completions: completions, calendar: calendar)
+
+        var eligible = 0
+        var completed = 0
+        var cursor = thirtyDayWindowStart
+        let end = calendar.date(byAdding: .day, value: 1, to: todayStart) ?? todayStart
+
+        while cursor < end {
+            if HabitAnalytics.isHabit(
+                habit,
+                activeOn: cursor,
+                today: todayStart,
+                pausePeriods: pausePeriods,
+                calendar: calendar
+            ) {
+                eligible += 1
+                if completedDays.contains(cursor) {
+                    completed += 1
+                }
+            }
+
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+
+        let percent = eligible == 0 ? 0 : Int((Double(completed) / Double(eligible) * 100).rounded())
+        return (completed, eligible, percent)
     }
 
     private func metricRow(label: String, value: String) -> some View {

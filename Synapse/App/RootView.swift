@@ -46,7 +46,7 @@ struct RootView: View {
             .opacity(selectedTab == .today ? 1 : 0)
             .allowsHitTesting(selectedTab == .today)
 
-            ManageHabitsView(title: "Habits", showsDoneButton: false)
+            ManageHabitsView(title: "Identity", showsDoneButton: false)
                 .opacity(selectedTab == .habits ? 1 : 0)
                 .allowsHitTesting(selectedTab == .habits)
 
@@ -119,7 +119,7 @@ struct RootView: View {
 
                 addCaptureButton
 
-                tabButton(tab: .habits, title: "Habits", icon: "leaf")
+                tabButton(tab: .habits, title: "Identity", icon: "leaf")
                 tabButton(tab: .review, title: "Review", icon: "chart.bar")
             }
             .padding(.horizontal, Theme.Spacing.lg)

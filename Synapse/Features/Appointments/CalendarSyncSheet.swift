@@ -59,6 +59,21 @@ struct CalendarSyncSheet: View {
                     loadAppleCalendarsIfNeeded()
                 }
             }
+            .onChange(of: settings.includeBirthdays) { _, includeBirthdays in
+                if !includeBirthdays {
+                    let birthdayIDs = Set(
+                        appleCalendars
+                            .filter(isBirthdayCalendar)
+                            .map(\.id)
+                    )
+                    var selected = settings.appleCalendarIDs
+                    selected.subtract(birthdayIDs)
+                    settings.appleCalendarIDs = selected
+                } else if settings.appleSyncEnabled {
+                    loadAppleCalendarsIfNeeded()
+                }
+                persistSettings()
+            }
             .onChange(of: settings.googleSyncEnabled) { _, _ in
                 persistSettings()
             }
@@ -80,6 +95,11 @@ struct CalendarSyncSheet: View {
                 .foregroundStyle(Theme.textSecondary)
 
             if settings.appleSyncEnabled {
+                Toggle("Include birthdays", isOn: $settings.includeBirthdays)
+                    .font(Theme.Typography.bodySmallStrong)
+                    .foregroundStyle(Theme.text)
+                    .tint(Theme.accent)
+
                 Button {
                     loadAppleCalendars(force: true)
                 } label: {
@@ -133,6 +153,12 @@ struct CalendarSyncSheet: View {
                 selected.insert(calendar.id)
             }
             settings.appleCalendarIDs = selected
+            let selectedBirthdayIDs = selected.filter { id in
+                appleCalendars.contains { calendar in
+                    calendar.id == id && isBirthdayCalendar(calendar)
+                }
+            }
+            settings.includeBirthdays = !selectedBirthdayIDs.isEmpty
             persistSettings()
         } label: {
             HStack(spacing: Theme.Spacing.xs) {
@@ -310,13 +336,18 @@ struct CalendarSyncSheet: View {
             appleCalendars = calendars
             hasLoadedAppleCalendars = true
 
-            let availableIDs = Set(calendars.map(\.id))
+            let birthdayIDs = Set(calendars.filter(isBirthdayCalendar).map(\.id))
+            var availableIDs = Set(calendars.map(\.id))
+            if !settings.includeBirthdays {
+                availableIDs.subtract(birthdayIDs)
+            }
             var selectedIDs = settings.appleCalendarIDs.intersection(availableIDs)
             if selectedIDs.isEmpty {
                 selectedIDs = availableIDs
             }
 
             settings.appleCalendarIDs = selectedIDs
+            settings.includeBirthdays = !birthdayIDs.isDisjoint(with: selectedIDs)
             persistSettings()
         }
     }
@@ -333,5 +364,11 @@ struct CalendarSyncSheet: View {
     private func persistSettings() {
         settings.touch()
         try? modelContext.save()
+    }
+
+    private func isBirthdayCalendar(_ calendar: AvailableAppleCalendar) -> Bool {
+        let title = calendar.title.lowercased()
+        let source = calendar.sourceTitle.lowercased()
+        return title.contains("birthday") || source.contains("birthday")
     }
 }

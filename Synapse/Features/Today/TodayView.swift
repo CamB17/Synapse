@@ -1319,32 +1319,14 @@ struct TodayView: View {
                     .foregroundStyle(Theme.textSecondary.opacity(0.88))
             }
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("Habits")
-                    .font(Theme.Typography.sectionLabel)
-                    .tracking(Theme.Typography.sectionTracking)
-                    .foregroundStyle(Theme.textSecondary.opacity(0.88))
-
-                if activeHabitsForSelectedDay.isEmpty {
-                    Text("No habits for this day.")
-                        .font(Theme.Typography.bodySmall)
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(.vertical, Theme.Spacing.xxs)
-                } else {
-                    VStack(spacing: Theme.Spacing.xxs) {
-                        ForEach(activeHabitsForSelectedDay) { habit in
-                            habitRow(for: habit)
-                        }
-                    }
-                }
-            }
+            appointmentsSectionContent
 
             Rectangle()
                 .fill(Theme.textSecondary.opacity(0.12))
                 .frame(height: 0.8)
                 .padding(.vertical, Theme.Spacing.xxxs)
 
-            appointmentsSectionContent
+            habitsSectionContent
 
             Rectangle()
                 .fill(Theme.textSecondary.opacity(0.12))
@@ -1357,6 +1339,28 @@ struct TodayView: View {
         .padding(Theme.Spacing.cardInset)
         .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
         .animation(.easeInOut(duration: 0.22), value: selectedDayStart)
+    }
+
+    private var habitsSectionContent: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("Habits")
+                .font(Theme.Typography.sectionLabel)
+                .tracking(Theme.Typography.sectionTracking)
+                .foregroundStyle(Theme.textSecondary.opacity(0.88))
+
+            if activeHabitsForSelectedDay.isEmpty {
+                Text("No habits for this day.")
+                    .font(Theme.Typography.bodySmall)
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.vertical, Theme.Spacing.xxs)
+            } else {
+                VStack(spacing: Theme.Spacing.xxs) {
+                    ForEach(activeHabitsForSelectedDay) { habit in
+                        habitRow(for: habit)
+                    }
+                }
+            }
+        }
     }
 
     private func habitRow(for habit: Habit) -> some View {

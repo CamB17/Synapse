@@ -201,9 +201,17 @@ final class AppointmentSyncService: ObservableObject {
 
         let availableCalendars = eventStore.calendars(for: .event)
         let selectedIDs = settings.appleCalendarIDs
-        let targetCalendars = selectedIDs.isEmpty
+        let selectedCalendars = selectedIDs.isEmpty
             ? availableCalendars
             : availableCalendars.filter { selectedIDs.contains($0.calendarIdentifier) }
+
+        let targetCalendars = settings.includeBirthdays
+            ? selectedCalendars
+            : selectedCalendars.filter { calendar in
+                let title = calendar.title.lowercased()
+                let source = calendar.source.title.lowercased()
+                return !title.contains("birthday") && !source.contains("birthday")
+            }
 
         guard !targetCalendars.isEmpty else {
             return SourceSyncResult(imported: 0, removed: 0)

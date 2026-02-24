@@ -27,6 +27,8 @@ struct ReviewView: View {
     @State private var showingDayPicker = false
     @State private var showingMonthPicker = false
     @State private var showingManageHabits = false
+    @State private var showingAllTasks = false
+    @State private var showingSettings = false
     @State private var showingIdentityDetails = false
     @State private var showingProductivityDetails = false
     @State private var editingTask: TaskItem?
@@ -609,6 +611,25 @@ struct ReviewView: View {
             }
             .navigationTitle("Review")
             .toolbarColorScheme(.light, for: .navigationBar)
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showingAllTasks = true
+                    } label: {
+                        Image(systemName: "list.bullet.rectangle")
+                            .font(Theme.Typography.iconCompact)
+                    }
+                    .tint(Theme.text)
+
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(Theme.Typography.iconCompact)
+                    }
+                    .tint(Theme.text)
+                }
+            }
             .sheet(isPresented: $showingDayPicker) {
                 ReviewDayPickerSheet(selectedDay: selectedDayStart) { day in
                     selectedDay = calendar.startOfDay(for: day)
@@ -624,7 +645,13 @@ struct ReviewView: View {
                 }
             }
             .sheet(isPresented: $showingManageHabits) {
-                ManageHabitsView(title: "Habits")
+                ManageHabitsView(title: "Identity")
+            }
+            .sheet(isPresented: $showingAllTasks) {
+                AllTasksView()
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
             }
             .sheet(item: $editingTask) { task in
                 TaskEditorSheet(task: task)
