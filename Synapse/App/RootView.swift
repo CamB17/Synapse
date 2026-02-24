@@ -82,7 +82,7 @@ struct RootView: View {
         }
         .sheet(isPresented: $showingTaskCapture) {
             QuickCaptureSheet(
-                placeholder: "Capture something…",
+                placeholder: "Task title",
                 canAssignDefaultDay: canAssignToday,
                 defaultAssignmentDay: todayStart,
                 onAdded: { _, _ in }

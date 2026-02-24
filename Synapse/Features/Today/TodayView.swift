@@ -173,7 +173,8 @@ struct TodayView: View {
     private var assignedTasksForSelectedDay: [TaskItem] {
         sortedByPriority(
             todayTasks.filter { task in
-                calendar.isDate(assignmentDay(for: task), inSameDayAs: selectedDayStart)
+                guard let day = assignedDay(for: task) else { return false }
+                return calendar.isDate(day, inSameDayAs: selectedDayStart)
             }
         )
     }
@@ -1698,18 +1699,13 @@ struct TodayView: View {
         var didChange = false
 
         for task in todayTasks {
-            let day = assignmentDay(for: task)
+            guard let day = assignedDay(for: task) else { continue }
 
             if day < todayStart {
                 task.carriedOverFrom = day
                 task.assignedDate = todayStart
                 didChange = true
                 continue
-            }
-
-            if task.assignedDate == nil, calendar.isDate(day, inSameDayAs: todayStart) {
-                task.assignedDate = todayStart
-                didChange = true
             }
         }
 
@@ -1894,11 +1890,9 @@ struct TodayView: View {
         return calendar.startOfDay(for: date).formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
-    private func assignmentDay(for task: TaskItem) -> Date {
-        if let assignedDate = task.assignedDate {
-            return calendar.startOfDay(for: assignedDate)
-        }
-        return calendar.startOfDay(for: task.createdAt)
+    private func assignedDay(for task: TaskItem) -> Date? {
+        guard let assignedDate = task.assignedDate else { return nil }
+        return calendar.startOfDay(for: assignedDate)
     }
 
     private func timeString(_ seconds: Int) -> String {

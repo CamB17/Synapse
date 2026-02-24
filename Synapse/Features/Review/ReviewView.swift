@@ -154,7 +154,7 @@ struct ReviewView: View {
         }
 
         var valueLabel: String {
-            "\(directionSymbol) \(signedValue)"
+            "\(directionSymbol) \(signedValue) (vs last month)"
         }
 
         var signedValue: String {
@@ -206,6 +206,12 @@ struct ReviewView: View {
 
     private var dailyCompletedHabitIDs: Set<UUID> {
         completionIDsByDay[selectedDayStart] ?? []
+    }
+
+    private var dailyHabitCompletions: [HabitCompletion] {
+        habitCompletions.filter { completion in
+            calendar.isDate(completion.day, inSameDayAs: selectedDayStart)
+        }
     }
 
     private var dailyRitualSummary: RitualDaySummary {
@@ -265,9 +271,29 @@ struct ReviewView: View {
         return output
     }
 
-    private var dailyPeakFocusBucket: TimeBucket? {
-        let entries = dailyFocusMinutesByBucket.filter { $0.value > 0 }
-        return entries.max { $0.value < $1.value }?.key
+    private var dailyRitualCompletionsByBucket: [TimeBucket: Int] {
+        var output: [TimeBucket: Int] = Dictionary(uniqueKeysWithValues: TimeBucket.allCases.map { ($0, 0) })
+        for completion in dailyHabitCompletions {
+            let bucket = timeBucket(for: completion.completedAt)
+            output[bucket, default: 0] += 1
+        }
+        return output
+    }
+
+    private var dailySecondaryInsight: DailyInsight? {
+        if let focusBucket = meaningfulLeadingBucket(
+            from: dailyFocusMinutesByBucket,
+            minimumTotal: dailyFocusSomeMinutes
+        ) {
+            return DailyInsight(title: "Peak focus window", value: focusBucket.label)
+        }
+        if let ritualBucket = meaningfulLeadingBucket(
+            from: dailyRitualCompletionsByBucket,
+            minimumTotal: 2
+        ) {
+            return DailyInsight(title: "Most rituals completed", value: ritualBucket.label)
+        }
+        return nil
     }
 
     private var dailyInsights: [DailyInsight] {
@@ -275,32 +301,24 @@ struct ReviewView: View {
             return [DailyInsight(title: "Insights", value: "Insights will appear once this day begins.")]
         }
 
-        var items: [DailyInsight] = []
         let hasFocusTracking = !dailySessions.isEmpty
-        if let peak = dailyPeakFocusBucket {
-            items.append(DailyInsight(title: "Peak focus", value: peak.label))
-        }
-
-        if dailyFocusMinutes > 0 && !dailyCompletedTasks.isEmpty {
-            let perTask = Int((Double(dailyFocusMinutes) / Double(max(dailyCompletedTasks.count, 1))).rounded())
-            items.append(DailyInsight(title: "Focus per task", value: "\(perTask)m"))
-        }
 
         if dailyRitualSummary.total > 0 {
             let alignment = alignmentLabel(
                 ritualsComplete: dailyRitualSummary.isComplete,
                 focusMinutes: dailyFocusMinutes,
-                tasksFinished: dailyCompletedTasks.count,
                 hasFocusTracking: hasFocusTracking
             )
-            items.append(DailyInsight(title: "Ritual-focus alignment", value: alignment))
+            var items: [DailyInsight] = [
+                DailyInsight(title: "Ritual-focus alignment", value: alignment)
+            ]
+            if let secondary = dailySecondaryInsight {
+                items.append(secondary)
+            }
+            return items
         }
 
-        if items.isEmpty {
-            items.append(DailyInsight(title: "Insights", value: "Log rituals, tasks, or focus to reveal patterns."))
-        }
-
-        return Array(items.prefix(4))
+        return [DailyInsight(title: "Insights", value: "Log rituals, tasks, or focus to reveal patterns.")]
     }
 
     private var selectedMonthDays: [Date] {
@@ -403,6 +421,10 @@ struct ReviewView: View {
             return "Balanced"
         }
         return strongest.label
+    }
+
+    private var monthlyStrongestRitualCompletionCount: Int {
+        monthlyRitualCompletionsByBucket.values.max() ?? 0
     }
 
     private var selectedMonthWeekdayPattern: WeekdayPattern? {
@@ -709,8 +731,6 @@ struct ReviewView: View {
                 metricRow(label: "Ritual completion", value: dailyRitualCompletionLabel)
 
                 if selectedDayRelation != .future {
-                    metricRow(label: "Consistency", value: "\(dailyConsistencyPercent)%")
-
                     ritualProgressBar(ratio: dailyRitualSummary.ratio)
                 }
 
@@ -882,10 +902,6 @@ struct ReviewView: View {
         return "\(dailyRitualSummary.completed) of \(dailyRitualSummary.total)"
     }
 
-    private var dailyConsistencyPercent: Int {
-        Int((dailyRitualSummary.ratio * 100).rounded())
-    }
-
     private var monthlyReview: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             monthlyHeader
@@ -961,9 +977,9 @@ struct ReviewView: View {
 
             monthHeatmap
 
-            metricRow(label: "Best streak", value: "\(selectedMonthMetrics.bestStreak) day\(selectedMonthMetrics.bestStreak == 1 ? "" : "s")")
-            metricRow(label: "Days fully complete", value: "\(selectedMonthMetrics.fullDays)")
+            featuredMetricRow(label: "Days fully complete", value: "\(selectedMonthMetrics.fullDays)")
             metricRow(label: "Days partially complete", value: "\(selectedMonthMetrics.partialDays)")
+            metricRow(label: "Best streak", value: "\(selectedMonthMetrics.bestStreak) day\(selectedMonthMetrics.bestStreak == 1 ? "" : "s")")
         }
         .padding(Theme.Spacing.cardInset)
         .surfaceCard()
@@ -1086,25 +1102,36 @@ struct ReviewView: View {
                 .foregroundStyle(Theme.text)
 
             ForEach(TimeBucket.allCases) { bucket in
+                let ritualCompletions = monthlyRitualCompletionsByBucket[bucket, default: 0]
+                let focusMinutes = monthlyFocusMinutesByBucket[bucket, default: 0]
+                let isStrongest = monthlyStrongestRitualCompletionCount > 0
+                    && ritualCompletions == monthlyStrongestRitualCompletionCount
+
                 HStack {
                     Text(bucket.label)
-                        .font(Theme.Typography.bodySmall)
-                        .foregroundStyle(Theme.textSecondary)
+                        .font(isStrongest ? Theme.Typography.bodySmallStrong : Theme.Typography.bodySmall)
+                        .foregroundStyle(isStrongest ? Theme.text : Theme.textSecondary)
 
                     Spacer(minLength: 0)
 
-                    Text("Rituals \(monthlyRitualCompletionsByBucket[bucket, default: 0])")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.textSecondary)
+                    Text("Rituals \(ritualCompletions)")
+                        .font(isStrongest ? Theme.Typography.caption.weight(.semibold) : Theme.Typography.caption)
+                        .foregroundStyle(isStrongest ? Theme.text : Theme.textSecondary)
 
                     Text("•")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.textSecondary.opacity(0.7))
 
-                    Text("Focus \(formatMinutesLabel(fromMinutes: monthlyFocusMinutesByBucket[bucket, default: 0]))")
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Theme.text)
+                    Text("Focus \(formatMinutesLabel(fromMinutes: focusMinutes))")
+                        .font(Theme.Typography.caption.weight(isStrongest ? .semibold : .medium))
+                        .foregroundStyle(isStrongest ? Theme.text : Theme.textSecondary)
                 }
+                .padding(.vertical, Theme.Spacing.xxxs)
+                .padding(.horizontal, Theme.Spacing.xs)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isStrongest ? Theme.accent.opacity(0.09) : Color.clear)
+                )
             }
         }
         .padding(Theme.Spacing.cardInset)
@@ -1445,10 +1472,25 @@ struct ReviewView: View {
         }
     }
 
+    private func featuredMetricRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(Theme.Typography.bodySmallStrong)
+                .foregroundStyle(Theme.text)
+
+            Spacer(minLength: 0)
+
+            Text(value)
+                .font(Theme.Typography.itemTitleProminent)
+                .foregroundStyle(Theme.text)
+                .contentTransition(.numericText())
+        }
+    }
+
     private func habitRateBar(ratio: Double) -> some View {
         ZStack(alignment: .leading) {
             Capsule(style: .continuous)
-                .fill(Theme.surface.opacity(0.95))
+                .fill(Theme.surface.opacity(0.72))
 
             GeometryReader { proxy in
                 Capsule(style: .continuous)
@@ -1469,17 +1511,15 @@ struct ReviewView: View {
     private func alignmentLabel(
         ritualsComplete: Bool,
         focusMinutes: Int,
-        tasksFinished: Int,
         hasFocusTracking: Bool
     ) -> String {
-        _ = tasksFinished
         guard hasFocusTracking else { return "Ritual-focused day" }
 
         if ritualsComplete && focusMinutes >= dailyFocusHighMinutes {
             return "High-alignment day"
         }
         if ritualsComplete && focusMinutes < dailyFocusSomeMinutes {
-            return "Identity-first day"
+            return "Ritual-focused day"
         }
         if !ritualsComplete && focusMinutes >= dailyFocusSomeMinutes {
             return "Output-heavy day"
@@ -1487,7 +1527,18 @@ struct ReviewView: View {
         if !ritualsComplete && focusMinutes < dailyFocusSomeMinutes {
             return "Low-activation day"
         }
-        return "Identity-first day"
+        return "Ritual-focused day"
+    }
+
+    private func meaningfulLeadingBucket(from values: [TimeBucket: Int], minimumTotal: Int) -> TimeBucket? {
+        let total = values.values.reduce(0, +)
+        guard total >= minimumTotal else { return nil }
+        guard let strongestValue = values.values.max(), strongestValue > 0 else { return nil }
+
+        let strongestBuckets = values.filter { $0.value == strongestValue }.map(\.key)
+        guard strongestBuckets.count == 1 else { return nil }
+
+        return strongestBuckets.first
     }
 
     private func ritualProgressBar(ratio: Double) -> some View {

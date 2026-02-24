@@ -43,6 +43,7 @@ struct TaskEditorSheet: View {
                     Spacer(minLength: 0)
                 }
                 .padding(Theme.Spacing.md)
+                .padding(.top, Theme.Spacing.lg)
             }
             .navigationTitle("Task")
             .navigationBarTitleDisplayMode(.inline)

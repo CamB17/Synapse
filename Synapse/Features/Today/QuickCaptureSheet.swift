@@ -64,7 +64,7 @@ struct QuickCaptureSheet: View {
 
                     prioritySection
 
-                    Spacer(minLength: 0)
+                    addButton
                 }
                 .padding(Theme.Spacing.md)
                 .contentShape(Rectangle())
@@ -78,16 +78,25 @@ struct QuickCaptureSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .tint(Theme.accent)
-                        .buttonStyle(.plain)
-                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") { add() }
-                        .tint(Theme.accent)
-                        .buttonStyle(.plain)
-                        .disabled(addDisabled)
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(Theme.Typography.iconCompact)
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(width: 30, height: 30)
+                            .background(
+                                Circle()
+                                    .fill(Theme.surface2)
+                            )
+                            .overlay {
+                                Circle()
+                                    .stroke(Theme.textSecondary.opacity(0.15), lineWidth: 0.8)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close add task")
                 }
             }
             .onDisappear {
@@ -125,6 +134,30 @@ struct QuickCaptureSheet: View {
         .padding(.vertical, Theme.Spacing.xs)
         .frame(minHeight: 52)
         .surfaceCard(cornerRadius: Theme.radiusSmall)
+        .padding(.top, Theme.Spacing.xs)
+    }
+
+    private var addButton: some View {
+        Button {
+            add()
+        } label: {
+            Text("Add")
+                .font(Theme.Typography.bodySmallStrong)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.sm)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                        .fill(addDisabled ? Theme.textSecondary.opacity(0.36) : Theme.accent)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                        .stroke(.white.opacity(addDisabled ? 0.0 : 0.22), lineWidth: 0.8)
+                }
+                .shadow(color: Theme.cardShadow().opacity(addDisabled ? 0.0 : 0.8), radius: 6, y: 3)
+        }
+        .buttonStyle(.plain)
+        .disabled(addDisabled)
         .padding(.top, Theme.Spacing.xs)
     }
 
