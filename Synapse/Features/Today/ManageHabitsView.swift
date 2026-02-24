@@ -10,6 +10,8 @@ struct ManageHabitsView: View {
 
     @Query(sort: [SortDescriptor(\Habit.createdAt, order: .forward)])
     private var habits: [Habit]
+    @Query(sort: [SortDescriptor(\HabitPausePeriod.startDay, order: .reverse)])
+    private var pausePeriods: [HabitPausePeriod]
 
     @State private var text: String = ""
     @State private var voiceSeedText = ""
@@ -20,6 +22,10 @@ struct ManageHabitsView: View {
     
     private var activeHabits: [Habit] {
         habits.filter(\.isActive)
+    }
+
+    private var pausedHabits: [Habit] {
+        habits.filter { !$0.isActive }
     }
 
     var body: some View {
@@ -99,11 +105,6 @@ struct ManageHabitsView: View {
 
                                         Spacer(minLength: Theme.Spacing.xs)
 
-                                        Text("\(habit.currentStreak)")
-                                            .font(Theme.Typography.bodyMedium.weight(.semibold))
-                                            .foregroundStyle(Theme.textSecondary)
-                                            .monospacedDigit()
-
                                         if editingHabitID == habit.id {
                                             Button {
                                                 cancelEdit()
@@ -136,9 +137,19 @@ struct ManageHabitsView: View {
                                             .accessibilityLabel("Edit \(habit.title)")
 
                                             Button {
+                                                pause(habit)
+                                            } label: {
+                                                Image(systemName: "pause.circle")
+                                                    .font(Theme.Typography.iconCard)
+                                                    .foregroundStyle(Theme.textSecondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .accessibilityLabel("Pause \(habit.title)")
+
+                                            Button {
                                                 delete(habit)
                                             } label: {
-                                                Image(systemName: "minus.circle.fill")
+                                                Image(systemName: "trash.circle")
                                                     .font(Theme.Typography.iconCard)
                                                     .foregroundStyle(Theme.textSecondary)
                                             }
@@ -150,6 +161,55 @@ struct ManageHabitsView: View {
                                     .padding(.vertical, Theme.Spacing.sm)
 
                                     if index < activeHabits.count - 1 {
+                                        Divider()
+                                            .padding(.leading, Theme.Spacing.cardInset)
+                                    }
+                                }
+                            }
+                            .surfaceCard()
+                            .padding(.horizontal, Theme.Spacing.md)
+                        }
+                    }
+
+                    if !pausedHabits.isEmpty {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            SectionLabel(icon: "pause.circle", title: "Paused")
+                                .padding(.horizontal, Theme.Spacing.md)
+
+                            VStack(spacing: 0) {
+                                ForEach(Array(pausedHabits.enumerated()), id: \.element.id) { index, habit in
+                                    HStack(spacing: Theme.Spacing.sm) {
+                                        Text(habit.title)
+                                            .font(Theme.Typography.itemTitle)
+                                            .foregroundStyle(Theme.textSecondary)
+                                            .lineLimit(1)
+
+                                        Spacer(minLength: Theme.Spacing.xs)
+
+                                        Button {
+                                            resume(habit)
+                                        } label: {
+                                            Image(systemName: "play.circle.fill")
+                                                .font(Theme.Typography.iconCard)
+                                                .foregroundStyle(Theme.accent)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("Resume \(habit.title)")
+
+                                        Button {
+                                            delete(habit)
+                                        } label: {
+                                            Image(systemName: "trash.circle")
+                                                .font(Theme.Typography.iconCard)
+                                                .foregroundStyle(Theme.textSecondary)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("Remove \(habit.title)")
+                                    }
+                                    .padding(.horizontal, Theme.Spacing.cardInset)
+                                    .padding(.vertical, Theme.Spacing.sm)
+
+                                    if index < pausedHabits.count - 1 {
                                         Divider()
                                             .padding(.leading, Theme.Spacing.cardInset)
                                     }
@@ -237,10 +297,41 @@ struct ManageHabitsView: View {
 
     private func delete(_ habit: Habit) {
         modelContext.delete(habit)
+        for period in pausePeriods where period.habitId == habit.id {
+            modelContext.delete(period)
+        }
         do {
             try modelContext.save()
         } catch {
             print("Habit delete failed: \(error)")
+        }
+    }
+
+    private func pause(_ habit: Habit) {
+        guard habit.isActive else { return }
+        habit.isActive = false
+        if !pausePeriods.contains(where: { $0.habitId == habit.id && $0.endDay == nil }) {
+            modelContext.insert(HabitPausePeriod(habitId: habit.id, startDay: .now))
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("Habit pause failed: \(error)")
+        }
+    }
+
+    private func resume(_ habit: Habit) {
+        guard !habit.isActive else { return }
+        habit.isActive = true
+        if let period = pausePeriods.first(where: { $0.habitId == habit.id && $0.endDay == nil }) {
+            period.endDay = Calendar.current.startOfDay(for: .now)
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            print("Habit resume failed: \(error)")
         }
     }
 }

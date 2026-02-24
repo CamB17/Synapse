@@ -26,6 +26,12 @@ struct TodayView: View {
     @Query(sort: [SortDescriptor(\Habit.createdAt, order: .forward)])
     private var habits: [Habit]
 
+    @Query(sort: [SortDescriptor(\HabitCompletion.day, order: .reverse)])
+    private var habitCompletions: [HabitCompletion]
+
+    @Query(sort: [SortDescriptor(\HabitPausePeriod.startDay, order: .reverse)])
+    private var habitPausePeriods: [HabitPausePeriod]
+
     @Query(sort: [SortDescriptor(\FocusSession.startedAt, order: .reverse)])
     private var sessions: [FocusSession]
 
@@ -51,6 +57,7 @@ struct TodayView: View {
     @State private var headerProgressPulse = false
     @State private var headerCompletionGlow = false
     @State private var hasInitializedHeaderProgress = false
+    @State private var didBackfillHabitCompletions = false
     private let partOfDayTicker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     private enum FocusTimeFilter: String, CaseIterable {
@@ -183,53 +190,61 @@ struct TodayView: View {
         return hasYesterdayCarry ? "Carried forward from yesterday" : "Carried forward"
     }
 
-    private var activeHabits: [Habit] {
-        habits.filter(\.isActive)
+    private var todayRitualSummary: RitualDaySummary {
+        ritualSummary(for: todayStart)
     }
 
     private var activeHabitCount: Int {
-        activeHabits.count
+        todayRitualSummary.total
     }
 
     private var completedHabitCount: Int {
-        activeHabits.filter(\.completedToday).count
+        todayRitualSummary.completed
     }
 
     private var allRitualsComplete: Bool {
-        activeHabitCount > 0 && completedHabitCount == activeHabitCount
+        todayRitualSummary.isComplete
     }
 
     private var ritualCompletionRatio: CGFloat {
-        guard activeHabitCount > 0 else { return 0 }
-        let ratio = CGFloat(completedHabitCount) / CGFloat(activeHabitCount)
-        return max(0, min(1, ratio))
+        todayRitualSummary.ratio
     }
 
     private var ritualProgressLine: String {
-        guard activeHabitCount > 0 else {
+        guard todayRitualSummary.total > 0 else {
             return "No rituals set yet"
         }
         if allRitualsComplete {
-            return "Day complete."
+            return "Rituals complete."
         }
-        return "\(completedHabitCount) of \(activeHabitCount) rituals complete"
+        return "\(todayRitualSummary.completed) of \(todayRitualSummary.total) rituals complete"
     }
 
     private var currentStreak: Int {
-        guard !activeHabits.isEmpty else { return 0 }
-        return activeHabits.map(effectiveStreak(for:)).min() ?? 0
+        guard !habits.isEmpty else { return 0 }
+
+        var streak = 0
+        var cursor = todayStart
+        while ritualSummary(for: cursor).isComplete {
+            streak += 1
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+            cursor = previous
+        }
+        return streak
     }
 
     private var headerMomentumLine: String {
-        "Momentum → \(currentStreak) day streak"
+        if currentStreak > 0 {
+            return "\(currentStreak) day streak"
+        }
+        return hasAnyCompletedRitualDay ? "New streak begins." : "0 day streak"
     }
 
-    private func effectiveStreak(for habit: Habit) -> Int {
-        guard let lastCompletedDate = habit.lastCompletedDate else { return 0 }
-        if calendar.isDateInToday(lastCompletedDate) || calendar.isDateInYesterday(lastCompletedDate) {
-            return habit.currentStreak
+    private var hasAnyCompletedRitualDay: Bool {
+        let completedDays = Set(habitCompletions.map { calendar.startOfDay(for: $0.day) })
+        return completedDays.contains { day in
+            day < todayStart && ritualSummary(for: day).isComplete
         }
-        return 0
     }
 
     private var totalFocusSecondsSelectedDay: Int {
@@ -244,26 +259,39 @@ struct TodayView: View {
         Self.partOfDay(at: .now, calendar: calendar)
     }
 
+    private struct RitualDaySummary {
+        let total: Int
+        let completed: Int
+
+        var isComplete: Bool {
+            total > 0 && completed == total
+        }
+
+        var ratio: CGFloat {
+            guard total > 0 else { return 0 }
+            return CGFloat(completed) / CGFloat(total)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScreenCanvas(daySeed: daySyncAnchor) {
                 ZStack(alignment: .bottomTrailing) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                            header
-                            calendarRail
-                            ritualsSection
+                    if !isFocusMode {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                                header
+                                calendarRail
+                                ritualsSection
 
-                            focusSection
+                                focusSection
 
-                            Spacer(minLength: 88)
+                                Spacer(minLength: 88)
+                            }
+                            .padding(Theme.Spacing.md)
                         }
-                        .padding(Theme.Spacing.md)
+                        .transition(.opacity)
                     }
-                    .opacity(isFocusMode ? 0.08 : 1)
-                    .blur(radius: isFocusMode ? 12 : 0)
-                    .scaleEffect(isFocusMode ? 0.985 : 1)
-                    .allowsHitTesting(!isFocusMode)
 
                     if isFocusMode {
                         immersiveFocusLayer
@@ -298,6 +326,7 @@ struct TodayView: View {
                 )
             }
             .onAppear {
+                backfillHabitCompletionsIfNeeded()
                 synchronizeDayState()
                 synchronizeFocusFilterWithCurrentPartOfDay(force: true)
                 hideBottomNavigation = isFocusMode
@@ -361,6 +390,37 @@ struct TodayView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Today")
+                    .font(Theme.Typography.titleLarge)
+                    .foregroundStyle(Theme.text)
+
+                Spacer(minLength: 0)
+
+                Button {
+                    let haptic = UIImpactFeedbackGenerator(style: .soft)
+                    haptic.impactOccurred()
+                    toggleFocusMode()
+                } label: {
+                    Label("Focus", systemImage: "timer")
+                        .font(Theme.Typography.bodySmallStrong)
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.vertical, Theme.Spacing.xxs)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Theme.accent.opacity(0.12))
+                        )
+                        .overlay {
+                            Capsule(style: .continuous)
+                                .stroke(Theme.accent.opacity(0.26), lineWidth: 0.8)
+                        }
+                        .shadow(color: Theme.cardShadow().opacity(0.7), radius: 4, y: 2)
+                }
+                .buttonStyle(.plain)
+            }
+
             ZStack(alignment: .leading) {
                 Capsule(style: .continuous)
                     .fill(Theme.surface2.opacity(0.92))
@@ -392,38 +452,6 @@ struct TodayView: View {
                 }
             }
             .animation(.spring(response: 0.34, dampingFraction: 0.82), value: animatedCompletionRatio)
-
-            HStack(alignment: .firstTextBaseline) {
-                Text("Today")
-                    .font(Theme.Typography.titleLarge)
-                    .foregroundStyle(Theme.text)
-
-                Spacer(minLength: 0)
-
-                Button {
-                    let haptic = UIImpactFeedbackGenerator(style: .soft)
-                    haptic.impactOccurred()
-                    toggleFocusMode()
-                } label: {
-                    Label(isFocusMode ? "Exit Focus" : "Focus", systemImage: isFocusMode ? "pause.fill" : "timer")
-                        .font(Theme.Typography.bodySmallStrong)
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(isFocusMode ? Theme.accent2 : Theme.accent)
-                        .padding(.horizontal, Theme.Spacing.sm)
-                        .padding(.vertical, Theme.Spacing.xxs)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill((isFocusMode ? Theme.accent2 : Theme.accent).opacity(0.12))
-                        )
-                        .overlay {
-                            Capsule(style: .continuous)
-                                .stroke((isFocusMode ? Theme.accent2 : Theme.accent).opacity(0.26), lineWidth: 0.8)
-                        }
-                        .shadow(color: Theme.cardShadow().opacity(0.7), radius: 4, y: 2)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.bottom, Theme.Spacing.xxxs)
 
             Text(ritualProgressLine)
                 .font(Theme.Typography.bodySmall)
@@ -518,45 +546,29 @@ struct TodayView: View {
     }
 
     private func weekDayTile(for day: Date) -> some View {
-        let summary = daySummary(for: day)
+        let summary = ritualSummary(for: day)
         let isSelected = calendar.isDate(day, inSameDayAs: selectedDayStart)
-        let total = summary.pendingCount + summary.completedCount
-        let progress = total > 0 ? CGFloat(summary.completedCount) / CGFloat(total) : 0
-        let isComplete = total > 0 && summary.pendingCount == 0
+        let progress = summary.ratio
 
         return Button {
             withAnimation(.snappy(duration: 0.18)) {
                 selectedDate = calendar.startOfDay(for: day)
             }
         } label: {
-            ZStack(alignment: .topTrailing) {
-                VStack(spacing: Theme.Spacing.xxxs) {
-                    Text(day.formatted(.dateTime.weekday(.narrow)))
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.textSecondary)
+            VStack(spacing: Theme.Spacing.xxxs) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(summary.total == 0 ? Theme.surface2.opacity(0.42) : Theme.accent.opacity(0.08 + (0.45 * progress)))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(isSelected ? Theme.accent.opacity(0.7) : Theme.textSecondary.opacity(0.12), lineWidth: 0.8)
+                    }
+                    .frame(height: 42)
 
-                    Text(day.formatted(.dateTime.day()))
-                        .font(Theme.Typography.bodySmallStrong)
-                        .foregroundStyle(Theme.text)
-                }
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .padding(.vertical, Theme.Spacing.xxxs)
-                .background(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(total == 0 ? Theme.surface2.opacity(0.7) : Theme.accent.opacity(0.05 + (0.12 * progress)))
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(isSelected ? Theme.accent.opacity(0.72) : Color.clear, lineWidth: 0.8)
-                }
-
-                if isComplete {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(Theme.success.opacity(0.86))
-                        .padding(4)
-                }
+                Text(day.formatted(.dateTime.weekday(.narrow)))
+                    .font(Theme.Typography.caption.weight(.medium))
+                    .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
             }
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
     }
@@ -577,33 +589,22 @@ struct TodayView: View {
     }
 
     private func monthCell(for day: Date) -> some View {
-        let summary = daySummary(for: day)
+        let summary = ritualSummary(for: day)
         let isSelected = calendar.isDate(day, inSameDayAs: selectedDayStart)
-        let total = summary.pendingCount + summary.completedCount
-        let ratio = total > 0 ? CGFloat(summary.completedCount) / CGFloat(total) : 0
-        let isComplete = total > 0 && summary.pendingCount == 0
+        let ratio = summary.ratio
 
         return Button {
             withAnimation(.snappy(duration: 0.18)) {
                 selectedDate = calendar.startOfDay(for: day)
             }
         } label: {
-            ZStack(alignment: .topTrailing) {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(total == 0 ? Theme.surface2.opacity(0.4) : Theme.accent.opacity(0.05 + (0.16 * ratio)))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .stroke(isSelected ? Theme.accent.opacity(0.7) : .clear, lineWidth: 0.6)
-                    }
-
-                if isComplete {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 7, weight: .semibold))
-                        .foregroundStyle(Theme.success.opacity(0.84))
-                        .padding(3)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(summary.total == 0 ? Theme.surface2.opacity(0.36) : Theme.accent.opacity(0.08 + (0.5 * ratio)))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(isSelected ? Theme.accent.opacity(0.72) : Theme.textSecondary.opacity(0.08), lineWidth: 0.6)
                 }
-            }
-            .frame(height: 20)
+                .frame(height: 18)
         }
         .buttonStyle(.plain)
     }
@@ -807,22 +808,17 @@ struct TodayView: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Theme.accent.opacity(0.24),
-                    Theme.surface.opacity(0.97),
-                    Theme.surface2.opacity(0.93)
+                    Theme.surface,
+                    Theme.accent.opacity(0.16),
+                    Theme.surface2.opacity(0.9)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
             .ignoresSafeArea()
 
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .opacity(0.18)
-                .ignoresSafeArea()
-
             VStack(spacing: Theme.Spacing.lg) {
-                Spacer(minLength: 64)
+                Spacer(minLength: 86)
 
                 Text(activeFocusTask?.title ?? "Select a high-priority task")
                     .font(.system(size: 30, weight: .semibold, design: .rounded))
@@ -832,18 +828,9 @@ struct TodayView: View {
                     .frame(maxWidth: 340)
 
                 ZStack {
-                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                        let wave = (sin(context.date.timeIntervalSinceReferenceDate * 2.6) + 1) / 2
-
-                        Circle()
-                            .fill(Theme.accent.opacity(focusIsRunning ? (0.10 + (0.08 * wave)) : 0.0))
-                            .frame(
-                                width: focusIsRunning ? (188 + (20 * wave)) : 188,
-                                height: focusIsRunning ? (188 + (20 * wave)) : 188
-                            )
-                            .blur(radius: focusIsRunning ? 22 : 28)
-                    }
-
+                    Circle()
+                        .fill(Theme.accent.opacity(0.08))
+                        .frame(width: 206, height: 206)
                     Text(timeString(focusElapsedSeconds))
                         .font(.system(size: 72, weight: .semibold, design: .rounded))
                         .monospacedDigit()
@@ -1151,15 +1138,61 @@ struct TodayView: View {
         return completedTasks.first(where: { $0.id == id })
     }
 
-    private func daySummary(for day: Date) -> (pendingCount: Int, completedCount: Int) {
+    private func ritualSummary(for day: Date) -> RitualDaySummary {
         let target = calendar.startOfDay(for: day)
-        let pending = todayTasks.filter { task in
-            calendar.isDate(assignmentDay(for: task), inSameDayAs: target)
-        }.count
-        let completed = completedTasks.filter { task in
-            calendar.isDate(assignmentDay(for: task), inSameDayAs: target)
-        }.count
-        return (pending, completed)
+        let activeForDay = habits.filter { isHabit($0, activeOn: target) }
+        guard !activeForDay.isEmpty else { return RitualDaySummary(total: 0, completed: 0) }
+
+        let completedIDs = Set(
+            habitCompletions
+                .filter { calendar.isDate($0.day, inSameDayAs: target) }
+                .map(\.habitId)
+        )
+        let completedCount = activeForDay.reduce(0) { partial, habit in
+            partial + (completedIDs.contains(habit.id) ? 1 : 0)
+        }
+
+        return RitualDaySummary(total: activeForDay.count, completed: completedCount)
+    }
+
+    private func isHabit(_ habit: Habit, activeOn day: Date) -> Bool {
+        let dayStart = calendar.startOfDay(for: day)
+        let createdDay = calendar.startOfDay(for: habit.createdAt)
+        guard dayStart >= createdDay else { return false }
+
+        let periods = habitPausePeriods.filter { $0.habitId == habit.id }
+        if !habit.isActive, periods.allSatisfy({ $0.endDay != nil }), dayStart >= todayStart {
+            return false
+        }
+        for period in periods {
+            let start = calendar.startOfDay(for: period.startDay)
+            let end = calendar.startOfDay(for: period.endDay ?? .distantFuture)
+            if dayStart >= start && dayStart < end {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func backfillHabitCompletionsIfNeeded() {
+        guard !didBackfillHabitCompletions else { return }
+        didBackfillHabitCompletions = true
+
+        var didInsert = false
+        for habit in habits {
+            guard let lastCompletedDate = habit.lastCompletedDate else { continue }
+            let day = calendar.startOfDay(for: lastCompletedDate)
+            let exists = habitCompletions.contains {
+                $0.habitId == habit.id && calendar.isDate($0.day, inSameDayAs: day)
+            }
+            guard !exists else { continue }
+            modelContext.insert(HabitCompletion(habitId: habit.id, day: day, completedAt: lastCompletedDate))
+            didInsert = true
+        }
+
+        if didInsert {
+            try? modelContext.save()
+        }
     }
 
     private func sortedByPriority(_ items: [TaskItem]) -> [TaskItem] {

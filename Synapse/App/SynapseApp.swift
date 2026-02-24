@@ -6,7 +6,13 @@ struct SynapseApp: App {
     let container: ModelContainer
 
     init() {
-        let schema = Schema([TaskItem.self, FocusSession.self, Habit.self])
+        let schema = Schema([
+            TaskItem.self,
+            FocusSession.self,
+            Habit.self,
+            HabitCompletion.self,
+            HabitPausePeriod.self
+        ])
         let config = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: false,

@@ -13,6 +13,8 @@ struct HabitBlock: View {
 
     @Query(sort: [SortDescriptor(\Habit.createdAt, order: .forward)])
     private var habits: [Habit]
+    @Query(sort: [SortDescriptor(\HabitCompletion.day, order: .reverse)])
+    private var completions: [HabitCompletion]
 
     @State private var showingManage = false
     @State private var pulseId: UUID?
@@ -128,9 +130,11 @@ struct HabitBlock: View {
         withAnimation(.snappy(duration: 0.18)) {
             if wasCompleted {
                 habit.uncompleteToday()
+                removeCompletionRecord(for: habit.id)
                 sparkleId = nil
             } else {
                 habit.completeToday()
+                ensureCompletionRecord(for: habit.id)
                 sparkleId = habit.id
             }
             pulseId = wasCompleted ? nil : habit.id
@@ -159,6 +163,21 @@ struct HabitBlock: View {
         }
         if hasCompletedAll {
             showCompletedRituals = false
+        }
+    }
+
+    private func ensureCompletionRecord(for habitID: UUID) {
+        let today = Calendar.current.startOfDay(for: .now)
+        guard !completions.contains(where: { $0.habitId == habitID && Calendar.current.isDate($0.day, inSameDayAs: today) }) else {
+            return
+        }
+        modelContext.insert(HabitCompletion(habitId: habitID, day: today))
+    }
+
+    private func removeCompletionRecord(for habitID: UUID) {
+        let today = Calendar.current.startOfDay(for: .now)
+        for completion in completions where completion.habitId == habitID && Calendar.current.isDate(completion.day, inSameDayAs: today) {
+            modelContext.delete(completion)
         }
     }
 }
