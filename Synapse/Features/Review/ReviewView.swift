@@ -583,6 +583,10 @@ struct ReviewView: View {
         return "This month, \(strongestTimeOfDayLabel) was your strongest rhythm. Best streak: \(selectedMonthMetrics.bestStreak) day\(selectedMonthMetrics.bestStreak == 1 ? "" : "s")."
     }
 
+    private var reviewBottomContentInset: CGFloat {
+        mode == .monthly ? 116 : 84
+    }
+
     var body: some View {
         NavigationStack {
             ScreenCanvas {
@@ -597,7 +601,8 @@ struct ReviewView: View {
                             monthlyReview
                         }
 
-                        Spacer(minLength: Theme.Spacing.lg)
+                        Color.clear
+                            .frame(height: reviewBottomContentInset)
                     }
                     .padding(Theme.Spacing.md)
                 }

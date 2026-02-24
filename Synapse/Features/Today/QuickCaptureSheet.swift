@@ -67,12 +67,6 @@ struct QuickCaptureSheet: View {
                     }
                     .padding(Theme.Spacing.md)
                     .padding(.top, Theme.Spacing.lg)
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(
-                        TapGesture().onEnded {
-                            titleFieldFocused = false
-                        }
-                    )
                 }
                 .scrollIndicators(.hidden)
                 .scrollDismissesKeyboard(.interactively)
@@ -98,6 +92,13 @@ struct QuickCaptureSheet: View {
             }
             .onDisappear {
                 voiceCapture.stop()
+            }
+            .sheet(isPresented: $showingDatePicker) {
+                TaskDatePickerSheet(selectedDate: assignedDayStart) { day in
+                    assignedDate = calendar.startOfDay(for: day)
+                }
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
             }
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -165,9 +166,7 @@ struct QuickCaptureSheet: View {
             }
 
             Button {
-                withAnimation(.snappy(duration: 0.2)) {
-                    showingDatePicker.toggle()
-                }
+                showingDatePicker = true
             } label: {
                 HStack(spacing: Theme.Spacing.xxs) {
                     Image(systemName: "calendar")
@@ -180,7 +179,7 @@ struct QuickCaptureSheet: View {
 
                     Spacer(minLength: 0)
 
-                    Image(systemName: showingDatePicker ? "chevron.up" : "chevron.down")
+                    Image(systemName: "chevron.right")
                         .font(Theme.Typography.caption.weight(.semibold))
                         .foregroundStyle(Theme.textSecondary.opacity(0.85))
                 }
@@ -189,13 +188,6 @@ struct QuickCaptureSheet: View {
                 .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
             }
             .buttonStyle(.plain)
-
-            if showingDatePicker {
-                DatePicker("Date", selection: $assignedDate, displayedComponents: .date)
-                    .datePickerStyle(.graphical)
-                    .labelsHidden()
-                    .tint(Theme.accent)
-            }
 
             if isDefaultDaySelection && !canAssignDefaultDay {
                 Text("This day is full (max 5). Pick another date.")
@@ -386,5 +378,61 @@ struct QuickCaptureSheet: View {
                 }
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct TaskDatePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let selectedDate: Date
+    let onSelect: (Date) -> Void
+
+    @State private var pickerDate: Date
+
+    private var calendar: Calendar { .current }
+
+    init(selectedDate: Date, onSelect: @escaping (Date) -> Void) {
+        self.selectedDate = selectedDate
+        self.onSelect = onSelect
+        _pickerDate = State(initialValue: selectedDate)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScreenCanvas(daySeed: pickerDate) {
+                VStack(spacing: Theme.Spacing.md) {
+                    DatePicker(
+                        "Date",
+                        selection: $pickerDate,
+                        in: (calendar.date(from: DateComponents(year: 2000, month: 1, day: 1)) ?? .distantPast)...(calendar.date(from: DateComponents(year: 2100, month: 12, day: 31)) ?? .distantFuture),
+                        displayedComponents: [.date]
+                    )
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .tint(Theme.accent)
+                    .padding(Theme.Spacing.cardInset)
+                    .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(Theme.Spacing.md)
+            }
+            .navigationTitle("Choose Date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.light, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .tint(Theme.accent)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        onSelect(calendar.startOfDay(for: pickerDate))
+                        dismiss()
+                    }
+                    .tint(Theme.accent)
+                }
+            }
+        }
     }
 }

@@ -795,6 +795,7 @@ struct TodayView: View {
         let summary = ritualSummary(for: day)
         let isSelected = calendar.isDate(day, inSameDayAs: selectedDayStart)
         let tileState = tileState(for: day, summary: summary)
+        let completionState = weekStripCompletionState(for: day, summary: summary)
         let isToday = calendar.isDate(day, inSameDayAs: todayStart)
 
         return Button {
@@ -815,11 +816,24 @@ struct TodayView: View {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .fill(tileState.fill)
                     .overlay {
+                        if let tintOpacity = weekStripCompletionTintOpacity(for: completionState, isSelected: isSelected) {
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .fill(Theme.accent.opacity(tintOpacity))
+                        }
+                    }
+                    .overlay {
                         RoundedRectangle(cornerRadius: 11, style: .continuous)
                             .stroke(
                                 isSelected ? Theme.accent.opacity(0.68) : (isToday ? Theme.accent.opacity(0.32) : tileState.stroke),
                                 lineWidth: isSelected ? 1 : 0.8
                             )
+                    }
+                    .overlay {
+                        if let ring = weekStripCompletionRing(for: completionState, isSelected: isSelected) {
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .stroke(ring.color, lineWidth: ring.width)
+                                .padding(1)
+                        }
                     }
             )
         }
@@ -997,6 +1011,18 @@ struct TodayView: View {
         }
     }
 
+    private enum WeekStripCompletionState {
+        case none
+        case partial
+        case full
+        case future
+    }
+
+    private struct CompletionRingStyle {
+        let color: Color
+        let width: CGFloat
+    }
+
     private func tileFill(for state: CalendarTileState) -> Color {
         state.fill
     }
@@ -1012,6 +1038,56 @@ struct TodayView: View {
             return .partial
         }
         return .none
+    }
+
+    private func totalRituals(_ date: Date) -> Int {
+        ritualSummary(for: date).total
+    }
+
+    private func completedRituals(_ date: Date) -> Int {
+        ritualSummary(for: date).completed
+    }
+
+    private func allRitualsComplete(_ date: Date) -> Bool {
+        let total = totalRituals(date)
+        return total > 0 && completedRituals(date) == total
+    }
+
+    private func weekStripCompletionState(for day: Date, summary: RitualDaySummary) -> WeekStripCompletionState {
+        if isFuture(day) {
+            return .future
+        }
+        if allRitualsComplete(day) {
+            return .full
+        }
+        if summary.completed > 0 {
+            return .partial
+        }
+        return .none
+    }
+
+    private func weekStripCompletionTintOpacity(for state: WeekStripCompletionState, isSelected: Bool) -> Double? {
+        guard !isSelected else { return nil }
+        switch state {
+        case .full:
+            return 0.08
+        case .partial:
+            return 0.03
+        case .none, .future:
+            return nil
+        }
+    }
+
+    private func weekStripCompletionRing(for state: WeekStripCompletionState, isSelected: Bool) -> CompletionRingStyle? {
+        guard !isSelected else { return nil }
+        switch state {
+        case .full:
+            return CompletionRingStyle(color: Theme.accent.opacity(0.38), width: 1.2)
+        case .partial:
+            return CompletionRingStyle(color: Theme.accent.opacity(0.2), width: 0.9)
+        case .none, .future:
+            return nil
+        }
     }
 
     private func monthGridHeight(for monthStart: Date) -> CGFloat {
