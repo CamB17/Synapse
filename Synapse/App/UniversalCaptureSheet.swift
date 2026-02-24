@@ -4,7 +4,8 @@ struct UniversalCaptureSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let onAddTask: () -> Void
-    let onAddRitual: () -> Void
+    let onAddAppointment: (() -> Void)?
+    let onAddHabit: () -> Void
     let onStartFocus: (() -> Void)?
 
     var body: some View {
@@ -17,9 +18,16 @@ struct UniversalCaptureSheet: View {
                     onAddTask()
                 }
 
-                actionRow(icon: "leaf", title: "Add Ritual") {
+                if let onAddAppointment {
+                    actionRow(icon: "calendar.badge.plus", title: "Add Appointment") {
+                        dismiss()
+                        onAddAppointment()
+                    }
+                }
+
+                actionRow(icon: "leaf", title: "Add Habit") {
                     dismiss()
-                    onAddRitual()
+                    onAddHabit()
                 }
 
                 if let onStartFocus {

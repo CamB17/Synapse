@@ -37,7 +37,7 @@ struct HabitRow: View {
                 .animation(.spring(response: 0.22, dampingFraction: 0.65), value: showSparkle)
                 .animation(.snappy(duration: 0.16), value: isCompletedToday)
             }
-            .buttonStyle(RitualTapStyle())
+            .buttonStyle(HabitTapStyle())
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(title)
@@ -62,7 +62,7 @@ struct HabitRow: View {
     }
 }
 
-private struct RitualTapStyle: ButtonStyle {
+private struct HabitTapStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.95 : 1)

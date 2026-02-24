@@ -11,7 +11,9 @@ struct SynapseApp: App {
             FocusSession.self,
             Habit.self,
             HabitCompletion.self,
-            HabitPausePeriod.self
+            HabitPausePeriod.self,
+            Appointment.self,
+            CalendarSyncSettings.self
         ])
         let config = ModelConfiguration(
             schema: schema,

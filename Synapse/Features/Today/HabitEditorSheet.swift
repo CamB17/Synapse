@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-struct RitualEditorSheet: View {
+struct HabitEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -10,7 +10,7 @@ struct RitualEditorSheet: View {
     let onSaved: ((Habit) -> Void)?
 
     @State private var title: String
-    @State private var frequency: RitualFrequency
+    @State private var frequency: HabitFrequency
     @State private var timeOfDay: TaskPartOfDay
     @State private var selectedWeekdays: Set<Int>
 
@@ -44,7 +44,7 @@ struct RitualEditorSheet: View {
                 .padding(Theme.Spacing.md)
                 .padding(.top, Theme.Spacing.lg)
             }
-            .navigationTitle(habit == nil ? "Add Ritual" : "Edit Ritual")
+            .navigationTitle(habit == nil ? "Add Habit" : "Edit Habit")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
@@ -72,7 +72,7 @@ struct RitualEditorSheet: View {
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
 
-            TextField("Ritual name", text: $title)
+            TextField("Habit name", text: $title)
                 .font(Theme.Typography.bodyMedium)
                 .foregroundStyle(Theme.text)
                 .textInputAutocapitalization(.sentences)
@@ -89,9 +89,9 @@ struct RitualEditorSheet: View {
                 .foregroundStyle(Theme.textSecondary)
 
             Picker("Frequency", selection: $frequency) {
-                Text(RitualFrequency.daily.displayLabel).tag(RitualFrequency.daily)
-                Text(RitualFrequency.weekly.displayLabel).tag(RitualFrequency.weekly)
-                Text(RitualFrequency.custom.displayLabel).tag(RitualFrequency.custom)
+                Text(HabitFrequency.daily.displayLabel).tag(HabitFrequency.daily)
+                Text(HabitFrequency.weekly.displayLabel).tag(HabitFrequency.weekly)
+                Text(HabitFrequency.custom.displayLabel).tag(HabitFrequency.custom)
             }
             .pickerStyle(.segmented)
 
@@ -238,7 +238,7 @@ struct RitualEditorSheet: View {
             try modelContext.save()
             dismiss()
         } catch {
-            print("Ritual save error: \(error)")
+            print("Habit save error: \(error)")
         }
     }
 }

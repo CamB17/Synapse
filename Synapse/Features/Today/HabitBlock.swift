@@ -19,7 +19,7 @@ struct HabitBlock: View {
     @State private var showingManage = false
     @State private var pulseId: UUID?
     @State private var sparkleId: UUID?
-    @State private var showCompletedRituals = false
+    @State private var showCompletedHabits = false
     var onCompletionStateChange: ((HabitCompletionSnapshot) -> Void)? = nil
 
     private var activeHabits: [Habit] {
@@ -41,7 +41,7 @@ struct HabitBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(alignment: .firstTextBaseline) {
-                SectionLabel(icon: "leaf", title: "Rituals")
+                SectionLabel(icon: "leaf", title: "Habits")
 
                 Spacer()
 
@@ -59,7 +59,7 @@ struct HabitBlock: View {
             if hasCompletedAll {
                 Button {
                     withAnimation(.snappy(duration: 0.18)) {
-                        showCompletedRituals.toggle()
+                        showCompletedHabits.toggle()
                     }
                 } label: {
                     HStack(spacing: Theme.Spacing.xs) {
@@ -67,13 +67,13 @@ struct HabitBlock: View {
                             .font(Theme.Typography.iconSmall)
                             .foregroundStyle(Theme.success)
 
-                        Text(showCompletedRituals ? "Hide completed rituals" : "All rituals complete")
+                        Text(showCompletedHabits ? "Hide completed habits" : "All habits complete")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.textSecondary)
 
                         Spacer(minLength: 0)
 
-                        Image(systemName: showCompletedRituals ? "chevron.up" : "chevron.down")
+                        Image(systemName: showCompletedHabits ? "chevron.up" : "chevron.down")
                             .font(Theme.Typography.caption.weight(.semibold))
                             .foregroundStyle(Theme.textSecondary.opacity(0.8))
                     }
@@ -88,7 +88,7 @@ struct HabitBlock: View {
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.vertical, Theme.Spacing.xxs)
             } else {
-                if !hasCompletedAll || showCompletedRituals {
+                if !hasCompletedAll || showCompletedHabits {
                     ScrollView(.vertical) {
                         VStack(spacing: Theme.Spacing.hairline) {
                             ForEach(activeHabits) { habit in
@@ -162,7 +162,7 @@ struct HabitBlock: View {
             if sparkleId == habit.id { sparkleId = nil }
         }
         if hasCompletedAll {
-            showCompletedRituals = false
+            showCompletedHabits = false
         }
     }
 

@@ -35,7 +35,15 @@ struct TodayView: View {
     @Query(sort: [SortDescriptor(\FocusSession.startedAt, order: .reverse)])
     private var sessions: [FocusSession]
 
+    @Query(sort: [SortDescriptor(\Appointment.startDate, order: .forward)])
+    private var appointments: [Appointment]
+
+    @Query(sort: [SortDescriptor(\CalendarSyncSettings.createdAt, order: .forward)])
+    private var syncSettingsRecords: [CalendarSyncSettings]
+
     @State private var showingCapture = false
+    @State private var appointmentEditorContext: AppointmentEditorContext?
+    @State private var showingCalendarSyncSheet = false
     @State private var isFocusMode = false
     @State private var showLaterTasks = false
     @State private var focusTimeFilter: FocusTimeFilter = TodayView.initialFocusTimeFilter()
@@ -64,11 +72,19 @@ struct TodayView: View {
     @State private var headerCompletionGlow = false
     @State private var hasInitializedHeaderProgress = false
     @State private var didBackfillHabitCompletions = false
+    @State private var lastAppointmentAutoSyncAt: Date?
+    @StateObject private var appointmentSyncService = AppointmentSyncService()
     private let partOfDayTicker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     private struct DayDetailSelection: Identifiable {
         let day: Date
         var id: Date { day }
+    }
+
+    private struct AppointmentEditorContext: Identifiable {
+        let id = UUID()
+        let appointment: Appointment?
+        let defaultStartDate: Date
     }
 
     private enum FocusTimeFilter: String, CaseIterable {
@@ -211,6 +227,40 @@ struct TodayView: View {
         return max(0, lowAndMediumTasks.count - shownLowAndMedium)
     }
 
+    private var activeSyncSettings: CalendarSyncSettings? {
+        syncSettingsRecords.first
+    }
+
+    private var appointmentsForSelectedDay: [Appointment] {
+        appointments
+            .filter { AppointmentPresentation.occurs($0, on: selectedDayStart, calendar: calendar) }
+            .sorted(by: appointmentsSortOrder)
+    }
+
+    private var appointmentStatusLine: String? {
+        if appointmentSyncService.isSyncing {
+            return "Syncing calendar events..."
+        }
+
+        if let error = appointmentSyncService.lastErrorMessage, !error.isEmpty {
+            return error
+        }
+
+        if let summary = appointmentSyncService.lastSummary {
+            if summary.totalImported == 0 && summary.removed == 0 {
+                return "Calendar sync is up to date."
+            }
+            return "Imported \(summary.totalImported) appointments."
+        }
+
+        guard let settings = activeSyncSettings else { return nil }
+        let lastSync = [settings.lastAppleSyncAt, settings.lastGoogleSyncAt]
+            .compactMap { $0 }
+            .max()
+        guard let lastSync else { return nil }
+        return "Last sync \(lastSync.formatted(.dateTime.month(.abbreviated).day().hour().minute()))."
+    }
+
     private var carriedForwardTasks: [TaskItem] {
         assignedTasksForSelectedDay.filter { $0.carriedOverFrom != nil }
     }
@@ -224,42 +274,42 @@ struct TodayView: View {
         return hasYesterdayCarry ? "Carried forward from yesterday" : "Carried forward"
     }
 
-    private var todayRitualSummary: RitualDaySummary {
-        ritualSummary(for: todayStart)
+    private var todayHabitSummary: HabitDaySummary {
+        habitSummary(for: todayStart)
     }
 
     private var activeHabitCount: Int {
-        todayRitualSummary.total
+        todayHabitSummary.total
     }
 
     private var completedHabitCount: Int {
-        todayRitualSummary.completed
+        todayHabitSummary.completed
     }
 
-    private var allRitualsComplete: Bool {
-        todayRitualSummary.isComplete
+    private var allHabitsComplete: Bool {
+        todayHabitSummary.isComplete
     }
 
-    private var ritualCompletionRatio: CGFloat {
-        selectedDayRitualSummary.ratio
+    private var habitCompletionRatio: CGFloat {
+        selectedDayHabitSummary.ratio
     }
 
-    private var selectedDayAllRitualsComplete: Bool {
-        selectedDayRitualSummary.isComplete
+    private var selectedDayAllHabitsComplete: Bool {
+        selectedDayHabitSummary.isComplete
     }
 
     private var headerTitle: String {
         formatHeaderTitle(selectedDayStart)
     }
 
-    private var ritualProgressLine: String {
-        guard selectedDayRitualSummary.total > 0 else {
-            return isTodaySelectedDay ? "No rituals set yet" : "No rituals for this day."
+    private var habitProgressLine: String {
+        guard selectedDayHabitSummary.total > 0 else {
+            return isTodaySelectedDay ? "No habits set yet" : "No habits for this day."
         }
-        if selectedDayRitualSummary.isComplete {
-            return "Rituals complete."
+        if selectedDayHabitSummary.isComplete {
+            return "Habits complete."
         }
-        return "\(selectedDayRitualSummary.completed) of \(selectedDayRitualSummary.total) rituals complete."
+        return "\(selectedDayHabitSummary.completed) of \(selectedDayHabitSummary.total) habits complete."
     }
 
     private var currentStreak: Int {
@@ -274,7 +324,7 @@ struct TodayView: View {
         var scannedDays = 0
 
         while cursor >= earliestHabitDay && scannedDays < 3650 {
-            let summary = ritualSummary(for: cursor)
+            let summary = habitSummary(for: cursor)
             if summary.total == 0 {
                 guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
                 cursor = previous
@@ -306,11 +356,11 @@ struct TodayView: View {
         if currentStreak > 0 {
             return .ongoing(currentStreak)
         }
-        return hasAnyCompletedRitualDay ? .restart : .freshStart
+        return hasAnyCompletedHabitDay ? .restart : .freshStart
     }
 
     private var completionAffirmationLine: String? {
-        guard isTodaySelectedDay, allRitualsComplete else { return nil }
+        guard isTodaySelectedDay, allHabitsComplete else { return nil }
         let options = [
             "Consistency builds identity.",
             "Another day aligned.",
@@ -319,10 +369,10 @@ struct TodayView: View {
         return options[dayRotationSeed % options.count]
     }
 
-    private var hasAnyCompletedRitualDay: Bool {
+    private var hasAnyCompletedHabitDay: Bool {
         let completedDays = Set(habitCompletions.map { calendar.startOfDay(for: $0.day) })
         return completedDays.contains { day in
-            day < todayStart && ritualSummary(for: day).isComplete
+            day < todayStart && habitSummary(for: day).isComplete
         }
     }
 
@@ -363,8 +413,8 @@ struct TodayView: View {
         )
     }
 
-    private var selectedDayRitualSummary: RitualDaySummary {
-        ritualSummary(for: selectedDayStart)
+    private var selectedDayHabitSummary: HabitDaySummary {
+        habitSummary(for: selectedDayStart)
     }
 
     private var selectedDayStatusLine: String {
@@ -372,13 +422,13 @@ struct TodayView: View {
         case .future:
             return "Upcoming"
         case .today, .past:
-            if selectedDayRitualSummary.isComplete {
-                return "Rituals complete."
+            if selectedDayHabitSummary.isComplete {
+                return "Habits complete."
             }
-            if selectedDayRitualSummary.total == 0 {
-                return "0 rituals kept"
+            if selectedDayHabitSummary.total == 0 {
+                return "0 habits kept"
             }
-            return "\(selectedDayRitualSummary.completed) of \(selectedDayRitualSummary.total) rituals complete"
+            return "\(selectedDayHabitSummary.completed) of \(selectedDayHabitSummary.total) habits complete"
         }
     }
 
@@ -390,7 +440,7 @@ struct TodayView: View {
         calendar.ordinality(of: .day, in: .year, for: todayStart) ?? 0
     }
 
-    private struct RitualDaySummary {
+    private struct HabitDaySummary {
         let total: Int
         let completed: Int
 
@@ -462,10 +512,38 @@ struct TodayView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
+            .sheet(item: $appointmentEditorContext) { context in
+                AppointmentEditorSheet(
+                    appointment: context.appointment,
+                    defaultStartDate: context.defaultStartDate
+                ) { saved in
+                    withAnimation(.snappy(duration: 0.18)) {
+                        selectedDate = calendar.startOfDay(for: saved.startDate)
+                    }
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
             .sheet(item: $selectedDayDetail) { selection in
                 DayDetailView(day: selection.day)
                     .presentationDetents([.fraction(0.68), .large])
                     .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showingCalendarSyncSheet) {
+                if let settings = activeSyncSettings {
+                    CalendarSyncSheet(
+                        settings: settings,
+                        syncService: appointmentSyncService,
+                        onDidSync: nil
+                    )
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                } else {
+                    ProgressView()
+                        .task {
+                            ensureCalendarSyncSettingsIfNeeded()
+                        }
+                }
             }
             .sheet(isPresented: $showingMonthYearPicker) {
                 MonthYearPickerSheet(
@@ -483,8 +561,10 @@ struct TodayView: View {
                 backfillHabitCompletionsIfNeeded()
                 synchronizeDayState()
                 synchronizeFocusFilterWithCurrentPartOfDay(force: true)
+                ensureCalendarSyncSettingsIfNeeded()
+                syncAppointmentsIfNeeded()
                 hideBottomNavigation = isFocusMode
-                animatedCompletionRatio = ritualCompletionRatio
+                animatedCompletionRatio = habitCompletionRatio
                 hasInitializedHeaderProgress = true
                 visibleMonthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDayStart)) ?? selectedDayStart
             }
@@ -492,14 +572,17 @@ struct TodayView: View {
                 guard phase == .active else { return }
                 synchronizeDayState()
                 synchronizeFocusFilterWithCurrentPartOfDay(force: true)
+                syncAppointmentsIfNeeded()
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
                 synchronizeDayState()
                 synchronizeFocusFilterWithCurrentPartOfDay(force: true)
+                syncAppointmentsIfNeeded(force: true)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
                 synchronizeDayState()
                 synchronizeFocusFilterWithCurrentPartOfDay(force: true)
+                syncAppointmentsIfNeeded(force: true)
             }
             .onReceive(partOfDayTicker) { _ in
                 guard scenePhase == .active else { return }
@@ -535,7 +618,7 @@ struct TodayView: View {
             .onChange(of: completedHabitCount) { oldValue, newValue in
                 guard isTodaySelectedDay else { return }
                 guard oldValue != newValue else { return }
-                animateHeaderProgress(triggerSuccess: newValue > oldValue && allRitualsComplete)
+                animateHeaderProgress(triggerSuccess: newValue > oldValue && allHabitsComplete)
             }
             .onChange(of: activeHabitCount) { oldValue, newValue in
                 guard isTodaySelectedDay else { return }
@@ -624,7 +707,7 @@ struct TodayView: View {
             }
             .frame(height: 9)
             .overlay {
-                if selectedDayAllRitualsComplete || (isTodaySelectedDay && headerCompletionGlow) {
+                if selectedDayAllHabitsComplete || (isTodaySelectedDay && headerCompletionGlow) {
                     Capsule(style: .continuous)
                         .stroke(Theme.accent.opacity(0.3), lineWidth: 0.9)
                         .shadow(
@@ -635,7 +718,7 @@ struct TodayView: View {
             }
             .animation(.easeInOut(duration: 0.24), value: animatedCompletionRatio)
 
-            Text(ritualProgressLine)
+            Text(habitProgressLine)
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
                 .contentTransition(.numericText())
@@ -792,7 +875,7 @@ struct TodayView: View {
     }
 
     private func weekDayTile(for day: Date) -> some View {
-        let summary = ritualSummary(for: day)
+        let summary = habitSummary(for: day)
         let isSelected = calendar.isDate(day, inSameDayAs: selectedDayStart)
         let tileState = tileState(for: day, summary: summary)
         let completionState = weekStripCompletionState(for: day, summary: summary)
@@ -939,7 +1022,7 @@ struct TodayView: View {
     }
 
     private func monthCell(for day: Date) -> some View {
-        let summary = ritualSummary(for: day)
+        let summary = habitSummary(for: day)
         let tileState = tileState(for: day, summary: summary)
         let isSelected = calendar.isDate(day, inSameDayAs: selectedDayStart)
         let isToday = calendar.isDate(day, inSameDayAs: todayStart)
@@ -1027,7 +1110,7 @@ struct TodayView: View {
         state.fill
     }
 
-    private func tileState(for day: Date, summary: RitualDaySummary) -> CalendarTileState {
+    private func tileState(for day: Date, summary: HabitDaySummary) -> CalendarTileState {
         if day > todayStart {
             return .future
         }
@@ -1040,24 +1123,24 @@ struct TodayView: View {
         return .none
     }
 
-    private func totalRituals(_ date: Date) -> Int {
-        ritualSummary(for: date).total
+    private func totalHabits(_ date: Date) -> Int {
+        habitSummary(for: date).total
     }
 
-    private func completedRituals(_ date: Date) -> Int {
-        ritualSummary(for: date).completed
+    private func completedHabits(_ date: Date) -> Int {
+        habitSummary(for: date).completed
     }
 
-    private func allRitualsComplete(_ date: Date) -> Bool {
-        let total = totalRituals(date)
-        return total > 0 && completedRituals(date) == total
+    private func allHabitsComplete(_ date: Date) -> Bool {
+        let total = totalHabits(date)
+        return total > 0 && completedHabits(date) == total
     }
 
-    private func weekStripCompletionState(for day: Date, summary: RitualDaySummary) -> WeekStripCompletionState {
+    private func weekStripCompletionState(for day: Date, summary: HabitDaySummary) -> WeekStripCompletionState {
         if isFuture(day) {
             return .future
         }
-        if allRitualsComplete(day) {
+        if allHabitsComplete(day) {
             return .full
         }
         if summary.completed > 0 {
@@ -1158,7 +1241,7 @@ struct TodayView: View {
     }
 
     private var headerBackground: some ShapeStyle {
-        let completionGlow = (selectedDayAllRitualsComplete || (isTodaySelectedDay && headerCompletionGlow)) ? 0.12 : 0.04
+        let completionGlow = (selectedDayAllHabitsComplete || (isTodaySelectedDay && headerCompletionGlow)) ? 0.12 : 0.04
         return AnyShapeStyle(
             LinearGradient(
                 colors: [
@@ -1174,12 +1257,12 @@ struct TodayView: View {
 
     private func animateHeaderProgress(triggerSuccess: Bool) {
         guard hasInitializedHeaderProgress else {
-            animatedCompletionRatio = ritualCompletionRatio
+            animatedCompletionRatio = habitCompletionRatio
             return
         }
 
         withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
-            animatedCompletionRatio = ritualCompletionRatio
+            animatedCompletionRatio = habitCompletionRatio
         }
         withAnimation(.snappy(duration: 0.18)) {
             headerProgressPulse = true
@@ -1204,7 +1287,7 @@ struct TodayView: View {
 
     private func animateHeaderForSelectedDateChange() {
         withAnimation(.easeInOut(duration: 0.24)) {
-            animatedCompletionRatio = ritualCompletionRatio
+            animatedCompletionRatio = habitCompletionRatio
         }
     }
 
@@ -1237,24 +1320,31 @@ struct TodayView: View {
             }
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("Rituals")
+                Text("Habits")
                     .font(Theme.Typography.sectionLabel)
                     .tracking(Theme.Typography.sectionTracking)
                     .foregroundStyle(Theme.textSecondary.opacity(0.88))
 
                 if activeHabitsForSelectedDay.isEmpty {
-                    Text("No rituals for this day.")
+                    Text("No habits for this day.")
                         .font(Theme.Typography.bodySmall)
                         .foregroundStyle(Theme.textSecondary)
                         .padding(.vertical, Theme.Spacing.xxs)
                 } else {
                     VStack(spacing: Theme.Spacing.xxs) {
                         ForEach(activeHabitsForSelectedDay) { habit in
-                            ritualRow(for: habit)
+                            habitRow(for: habit)
                         }
                     }
                 }
             }
+
+            Rectangle()
+                .fill(Theme.textSecondary.opacity(0.12))
+                .frame(height: 0.8)
+                .padding(.vertical, Theme.Spacing.xxxs)
+
+            appointmentsSectionContent
 
             Rectangle()
                 .fill(Theme.textSecondary.opacity(0.12))
@@ -1269,10 +1359,10 @@ struct TodayView: View {
         .animation(.easeInOut(duration: 0.22), value: selectedDayStart)
     }
 
-    private func ritualRow(for habit: Habit) -> some View {
+    private func habitRow(for habit: Habit) -> some View {
         let isCompleted = completedHabitIDsForSelectedDay.contains(habit.id)
         return Button {
-            toggleRitualForSelectedDay(habit)
+            toggleHabitForSelectedDay(habit)
         } label: {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: isCompleted ? "checkmark.circle.fill" : (selectedDayRelation == .future ? "circle.dashed" : "circle"))
@@ -1302,6 +1392,70 @@ struct TodayView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private var appointmentsSectionContent: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Appointments")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.textSecondary.opacity(0.82))
+
+                if !appointmentsForSelectedDay.isEmpty {
+                    Text("\(appointmentsForSelectedDay.count)")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.textSecondary.opacity(0.72))
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    openCalendarSyncSheet()
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Theme.textSecondary.opacity(0.84))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Calendar sync")
+
+                Button {
+                    openNewAppointmentEditor()
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(Theme.Typography.iconCompact)
+                        .foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add appointment")
+            }
+
+            if appointmentsForSelectedDay.isEmpty {
+                Text("No appointments for this day.")
+                    .font(Theme.Typography.bodySmall)
+                    .foregroundStyle(Theme.textSecondary)
+            } else {
+                VStack(spacing: Theme.Spacing.xxs) {
+                    ForEach(appointmentsForSelectedDay) { appointment in
+                        AppointmentRow(
+                            appointment: appointment,
+                            day: selectedDayStart,
+                            onTap: appointment.source == .manual ? {
+                                openAppointmentEditor(for: appointment)
+                            } : nil
+                        )
+                    }
+                }
+            }
+
+            if let appointmentStatusLine {
+                Text(appointmentStatusLine)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.textSecondary.opacity(0.78))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private var supportSectionContent: some View {
@@ -1605,6 +1759,72 @@ struct TodayView: View {
         return assignedTasksForSelectedDay.first { $0.id == focusActiveTaskID }
     }
 
+    private func appointmentsSortOrder(lhs: Appointment, rhs: Appointment) -> Bool {
+        if lhs.isAllDay != rhs.isAllDay {
+            return lhs.isAllDay && !rhs.isAllDay
+        }
+        if lhs.startDate != rhs.startDate {
+            return lhs.startDate < rhs.startDate
+        }
+        return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+    }
+
+    private func ensureCalendarSyncSettingsIfNeeded() {
+        guard activeSyncSettings == nil else { return }
+        _ = appointmentSyncService.ensureSettings(in: modelContext)
+    }
+
+    private func defaultManualAppointmentStartDate() -> Date {
+        let dayStart = calendar.startOfDay(for: selectedDayStart)
+        if isTodaySelectedDay {
+            let now = Date()
+            return max(now, dayStart)
+        }
+        return calendar.date(byAdding: .hour, value: 9, to: dayStart) ?? dayStart
+    }
+
+    private func openNewAppointmentEditor() {
+        appointmentEditorContext = AppointmentEditorContext(
+            appointment: nil,
+            defaultStartDate: defaultManualAppointmentStartDate()
+        )
+    }
+
+    private func openAppointmentEditor(for appointment: Appointment) {
+        appointmentEditorContext = AppointmentEditorContext(
+            appointment: appointment,
+            defaultStartDate: appointment.startDate
+        )
+    }
+
+    private func openCalendarSyncSheet() {
+        ensureCalendarSyncSettingsIfNeeded()
+        showingCalendarSyncSheet = true
+    }
+
+    private func syncAppointmentsIfNeeded(force: Bool = false) {
+        guard let settings = activeSyncSettings else { return }
+        guard settings.appleSyncEnabled || settings.googleSyncEnabled else { return }
+        guard !appointmentSyncService.isSyncing else { return }
+
+        let now = Date()
+        if !force, let lastAttempt = lastAppointmentAutoSyncAt, now.timeIntervalSince(lastAttempt) < 45 {
+            return
+        }
+
+        if !force {
+            let lastSync = [settings.lastAppleSyncAt, settings.lastGoogleSyncAt].compactMap { $0 }.max()
+            if let lastSync, now.timeIntervalSince(lastSync) < (15 * 60) {
+                return
+            }
+        }
+
+        lastAppointmentAutoSyncAt = now
+        Task {
+            _ = await appointmentSyncService.syncNow(using: settings, in: modelContext)
+        }
+    }
+
     private func complete(_ task: TaskItem) {
         guard isTodaySelectedDay, task.state == .today else { return }
 
@@ -1623,12 +1843,12 @@ struct TodayView: View {
         try? modelContext.save()
     }
 
-    private func toggleRitualForSelectedDay(_ habit: Habit) {
+    private func toggleHabitForSelectedDay(_ habit: Habit) {
         switch selectedDayRelation {
         case .past:
             return
         case .future:
-            showToast("Rituals can be completed on the day.")
+            showToast("Habits can be completed on the day.")
             return
         case .today:
             break
@@ -1799,10 +2019,10 @@ struct TodayView: View {
         return completedTasks.first(where: { $0.id == id })
     }
 
-    private func ritualSummary(for day: Date) -> RitualDaySummary {
+    private func habitSummary(for day: Date) -> HabitDaySummary {
         let target = calendar.startOfDay(for: day)
         let activeForDay = habits.filter { isHabit($0, activeOn: target) }
-        guard !activeForDay.isEmpty else { return RitualDaySummary(total: 0, completed: 0) }
+        guard !activeForDay.isEmpty else { return HabitDaySummary(total: 0, completed: 0) }
 
         let completedIDs = Set(
             habitCompletions
@@ -1813,11 +2033,11 @@ struct TodayView: View {
             partial + (completedIDs.contains(habit.id) ? 1 : 0)
         }
 
-        return RitualDaySummary(total: activeForDay.count, completed: completedCount)
+        return HabitDaySummary(total: activeForDay.count, completed: completedCount)
     }
 
     private func isHabit(_ habit: Habit, activeOn day: Date) -> Bool {
-        RitualAnalytics.isHabit(
+        HabitAnalytics.isHabit(
             habit,
             activeOn: day,
             today: todayStart,

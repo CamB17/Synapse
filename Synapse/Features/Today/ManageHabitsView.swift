@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct ManageHabitsView: View {
-    var title: String = "Rituals"
+    var title: String = "Habits"
     var showsDoneButton: Bool = true
 
     @Environment(\.dismiss) private var dismiss
@@ -20,12 +20,12 @@ struct ManageHabitsView: View {
     @Query(sort: [SortDescriptor(\HabitPausePeriod.startDay, order: .reverse)])
     private var pausePeriods: [HabitPausePeriod]
 
-    @State private var showingAddRitual = false
+    @State private var showingAddHabit = false
     @State private var editingHabit: Habit?
     @State private var showPausedSection = false
     @State private var reorderMode: EditMode = .inactive
 
-    private struct RitualRowMetrics {
+    private struct HabitRowMetrics {
         let monthlyPercent: Int
         let completedDays: Int
         let eligibleDays: Int
@@ -49,7 +49,7 @@ struct ManageHabitsView: View {
     private var bestMonthlyStreak: Int {
         activeHabits
             .map {
-                RitualAnalytics.bestStreakInMonth(
+                HabitAnalytics.bestStreakInMonth(
                     for: $0,
                     monthStart: currentMonthStart,
                     completions: completions,
@@ -63,7 +63,7 @@ struct ManageHabitsView: View {
 
     private var monthlyCompletionPercent: Int {
         let totals = activeHabits.reduce(into: (completed: 0, eligible: 0)) { partial, habit in
-            let monthly = RitualAnalytics.monthlyCompletion(
+            let monthly = HabitAnalytics.monthlyCompletion(
                 for: habit,
                 monthStart: currentMonthStart,
                 completions: completions,
@@ -89,8 +89,8 @@ struct ManageHabitsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                         identitySummaryCard
-                        activeRitualsZone
-                        pausedRitualsZone
+                        activeHabitsZone
+                        pausedHabitsZone
                         Spacer(minLength: 0)
                     }
                     .padding(Theme.Spacing.md)
@@ -101,7 +101,7 @@ struct ManageHabitsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showingAddRitual = true
+                        showingAddHabit = true
                     } label: {
                         Image(systemName: "plus")
                             .font(Theme.Typography.iconCompact)
@@ -116,11 +116,11 @@ struct ManageHabitsView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingAddRitual) {
-                RitualEditorSheet(defaultSortOrder: nextSortOrder)
+            .sheet(isPresented: $showingAddHabit) {
+                HabitEditorSheet(defaultSortOrder: nextSortOrder)
             }
             .sheet(item: $editingHabit) { habit in
-                RitualEditorSheet(habit: habit, defaultSortOrder: habit.sortOrder)
+                HabitEditorSheet(habit: habit, defaultSortOrder: habit.sortOrder)
             }
             .onAppear {
                 normalizeSortOrderIfNeeded()
@@ -141,10 +141,10 @@ struct ManageHabitsView: View {
         .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
     }
 
-    private var activeRitualsZone: some View {
+    private var activeHabitsZone: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack {
-                SectionLabel(icon: "leaf", title: "Active Rituals")
+                SectionLabel(icon: "leaf", title: "Active Habits")
 
                 Spacer(minLength: 0)
 
@@ -163,13 +163,13 @@ struct ManageHabitsView: View {
             if activeHabits.isEmpty {
                 EmptyStatePanel(
                     symbol: "leaf",
-                    title: "No rituals yet.",
-                    subtitle: "Use + to configure your first ritual."
+                    title: "No habits yet.",
+                    subtitle: "Use + to configure your first habit."
                 )
             } else {
                 List {
                     ForEach(activeHabits) { habit in
-                        activeRitualRow(for: habit)
+                        activeHabitRow(for: habit)
                             .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
@@ -185,7 +185,7 @@ struct ManageHabitsView: View {
         }
     }
 
-    private func activeRitualRow(for habit: Habit) -> some View {
+    private func activeHabitRow(for habit: Habit) -> some View {
         let metrics = metrics(for: habit)
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
@@ -236,18 +236,18 @@ struct ManageHabitsView: View {
         .surfaceCard(cornerRadius: Theme.radiusSmall)
     }
 
-    private var pausedRitualsZone: some View {
+    private var pausedHabitsZone: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             DisclosureGroup(isExpanded: $showPausedSection) {
                 VStack(spacing: Theme.Spacing.xxs) {
                     if pausedHabits.isEmpty {
-                        Text("No paused rituals.")
+                        Text("No paused habits.")
                             .font(Theme.Typography.bodySmall)
                             .foregroundStyle(Theme.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         ForEach(pausedHabits) { habit in
-                            pausedRitualRow(for: habit)
+                            pausedHabitRow(for: habit)
                         }
                     }
                 }
@@ -266,7 +266,7 @@ struct ManageHabitsView: View {
         }
     }
 
-    private func pausedRitualRow(for habit: Habit) -> some View {
+    private func pausedHabitRow(for habit: Habit) -> some View {
         HStack(spacing: Theme.Spacing.sm) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
                 Text(habit.title)
@@ -297,8 +297,8 @@ struct ManageHabitsView: View {
         return max(120, min(CGFloat(activeHabits.count) * rowHeight, 520))
     }
 
-    private func metrics(for habit: Habit) -> RitualRowMetrics {
-        let monthly = RitualAnalytics.monthlyCompletion(
+    private func metrics(for habit: Habit) -> HabitRowMetrics {
+        let monthly = HabitAnalytics.monthlyCompletion(
             for: habit,
             monthStart: currentMonthStart,
             completions: completions,
@@ -307,11 +307,11 @@ struct ManageHabitsView: View {
             calendar: calendar
         )
 
-        return RitualRowMetrics(
+        return HabitRowMetrics(
             monthlyPercent: monthly.percent,
             completedDays: monthly.completedDays,
             eligibleDays: monthly.eligibleDays,
-            currentStreak: RitualAnalytics.currentStreak(
+            currentStreak: HabitAnalytics.currentStreak(
                 for: habit,
                 completions: completions,
                 pausePeriods: pausePeriods,
@@ -380,7 +380,7 @@ struct ManageHabitsView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Ritual reorder error: \(error)")
+            print("Habit reorder error: \(error)")
         }
     }
 
@@ -396,7 +396,7 @@ struct ManageHabitsView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Ritual delete error: \(error)")
+            print("Habit delete error: \(error)")
         }
     }
 
@@ -411,7 +411,7 @@ struct ManageHabitsView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Ritual pause error: \(error)")
+            print("Habit pause error: \(error)")
         }
     }
 
@@ -428,7 +428,7 @@ struct ManageHabitsView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Ritual resume error: \(error)")
+            print("Habit resume error: \(error)")
         }
     }
 }

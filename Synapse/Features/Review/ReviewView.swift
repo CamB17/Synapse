@@ -26,7 +26,7 @@ struct ReviewView: View {
     }()
     @State private var showingDayPicker = false
     @State private var showingMonthPicker = false
-    @State private var showingManageRituals = false
+    @State private var showingManageHabits = false
     @State private var showingIdentityDetails = false
     @State private var showingProductivityDetails = false
     @State private var editingTask: TaskItem?
@@ -68,7 +68,7 @@ struct ReviewView: View {
         }
     }
 
-    private struct RitualDaySummary {
+    private struct HabitDaySummary {
         let total: Int
         let completed: Int
 
@@ -214,8 +214,8 @@ struct ReviewView: View {
         }
     }
 
-    private var dailyRitualSummary: RitualDaySummary {
-        ritualSummary(for: selectedDayStart)
+    private var dailyHabitSummary: HabitDaySummary {
+        habitSummary(for: selectedDayStart)
     }
 
     private var dailyCompletedTasks: [TaskItem] {
@@ -271,7 +271,7 @@ struct ReviewView: View {
         return output
     }
 
-    private var dailyRitualCompletionsByBucket: [TimeBucket: Int] {
+    private var dailyHabitCompletionsByBucket: [TimeBucket: Int] {
         var output: [TimeBucket: Int] = Dictionary(uniqueKeysWithValues: TimeBucket.allCases.map { ($0, 0) })
         for completion in dailyHabitCompletions {
             let bucket = timeBucket(for: completion.completedAt)
@@ -287,11 +287,11 @@ struct ReviewView: View {
         ) {
             return DailyInsight(title: "Peak focus window", value: focusBucket.label)
         }
-        if let ritualBucket = meaningfulLeadingBucket(
-            from: dailyRitualCompletionsByBucket,
+        if let habitBucket = meaningfulLeadingBucket(
+            from: dailyHabitCompletionsByBucket,
             minimumTotal: 2
         ) {
-            return DailyInsight(title: "Most rituals completed", value: ritualBucket.label)
+            return DailyInsight(title: "Most habits completed", value: habitBucket.label)
         }
         return nil
     }
@@ -303,14 +303,14 @@ struct ReviewView: View {
 
         let hasFocusTracking = !dailySessions.isEmpty
 
-        if dailyRitualSummary.total > 0 {
+        if dailyHabitSummary.total > 0 {
             let alignment = alignmentLabel(
-                ritualsComplete: dailyRitualSummary.isComplete,
+                habitsComplete: dailyHabitSummary.isComplete,
                 focusMinutes: dailyFocusMinutes,
                 hasFocusTracking: hasFocusTracking
             )
             var items: [DailyInsight] = [
-                DailyInsight(title: "Ritual-focus alignment", value: alignment)
+                DailyInsight(title: "Habit-focus alignment", value: alignment)
             ]
             if let secondary = dailySecondaryInsight {
                 items.append(secondary)
@@ -318,7 +318,7 @@ struct ReviewView: View {
             return items
         }
 
-        return [DailyInsight(title: "Insights", value: "Log rituals, tasks, or focus to reveal patterns.")]
+        return [DailyInsight(title: "Insights", value: "Log habits, tasks, or focus to reveal patterns.")]
     }
 
     private var selectedMonthDays: [Date] {
@@ -353,8 +353,8 @@ struct ReviewView: View {
         monthDataRange(for: selectedMonthStart)
     }
 
-    private var selectedMonthSummaries: [Date: RitualDaySummary] {
-        Dictionary(uniqueKeysWithValues: selectedMonthDays.map { ($0, ritualSummary(for: $0)) })
+    private var selectedMonthSummaries: [Date: HabitDaySummary] {
+        Dictionary(uniqueKeysWithValues: selectedMonthDays.map { ($0, habitSummary(for: $0)) })
     }
 
     private var selectedMonthMetrics: MonthMetrics {
@@ -413,18 +413,18 @@ struct ReviewView: View {
 
     private var strongestTimeOfDayLabel: String {
         guard let strongest = TimeBucket.allCases.max(by: {
-            monthlyRitualCompletionsByBucket[$0, default: 0] < monthlyRitualCompletionsByBucket[$1, default: 0]
+            monthlyHabitCompletionsByBucket[$0, default: 0] < monthlyHabitCompletionsByBucket[$1, default: 0]
         }) else {
             return "Balanced"
         }
-        if monthlyRitualCompletionsByBucket[strongest, default: 0] == 0 {
+        if monthlyHabitCompletionsByBucket[strongest, default: 0] == 0 {
             return "Balanced"
         }
         return strongest.label
     }
 
-    private var monthlyStrongestRitualCompletionCount: Int {
-        monthlyRitualCompletionsByBucket.values.max() ?? 0
+    private var monthlyStrongestHabitCompletionCount: Int {
+        monthlyHabitCompletionsByBucket.values.max() ?? 0
     }
 
     private var selectedMonthWeekdayPattern: WeekdayPattern? {
@@ -453,7 +453,7 @@ struct ReviewView: View {
         return values
     }
 
-    private var monthlyRitualCompletionsByBucket: [TimeBucket: Int] {
+    private var monthlyHabitCompletionsByBucket: [TimeBucket: Int] {
         var values: [TimeBucket: Int] = Dictionary(uniqueKeysWithValues: TimeBucket.allCases.map { ($0, 0) })
         for completion in selectedMonthCompletions {
             let bucket = timeBucket(for: completion.completedAt)
@@ -563,7 +563,7 @@ struct ReviewView: View {
 
     private var monthlyNarrativeLine: String {
         guard !habits.isEmpty else {
-            return "Add a ritual to unlock monthly pattern insights."
+            return "Add a habit to unlock monthly pattern insights."
         }
         guard selectedMonthDataRange.evaluationEndDay != nil else {
             return "This month is upcoming, and patterns will appear as days unfold."
@@ -573,7 +573,7 @@ struct ReviewView: View {
             let preferredFocusBucket = (monthlyCorrelation.highFocusRatePercent ?? 0) >= (monthlyCorrelation.lowFocusRatePercent ?? 0)
                 ? "\(monthlyCorrelation.thresholdMinutes)m+"
                 : "<\(monthlyCorrelation.thresholdMinutes)m"
-            return "Strongest weekday: \(pattern.strongestName). Ritual completion was higher on \(preferredFocusBucket) focus days."
+            return "Strongest weekday: \(pattern.strongestName). Habit completion was higher on \(preferredFocusBucket) focus days."
         }
 
         if fullCompleteDayDelta != 0 {
@@ -623,8 +623,8 @@ struct ReviewView: View {
                     selectedMonthStart = monthStart(for: month)
                 }
             }
-            .sheet(isPresented: $showingManageRituals) {
-                ManageHabitsView(title: "Rituals")
+            .sheet(isPresented: $showingManageHabits) {
+                ManageHabitsView(title: "Habits")
             }
             .sheet(item: $editingTask) { task in
                 TaskEditorSheet(task: task)
@@ -702,7 +702,7 @@ struct ReviewView: View {
     private var dailyIdentityCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack {
-                Text("Identity (Rituals)")
+                Text("Identity (Habits)")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.textSecondary)
 
@@ -719,24 +719,24 @@ struct ReviewView: View {
             }
 
             if habits.isEmpty {
-                Text("No rituals yet.")
+                Text("No habits yet.")
                     .font(Theme.Typography.bodySmallStrong)
                     .foregroundStyle(Theme.text)
 
-                Text("Add one ritual to begin your identity review.")
+                Text("Add one habit to begin your identity review.")
                     .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
 
-                Button("Add a ritual") {
-                    showingManageRituals = true
+                Button("Add a habit") {
+                    showingManageHabits = true
                 }
                 .font(Theme.Typography.bodySmallStrong)
                 .tint(Theme.accent)
             } else {
-                metricRow(label: "Ritual completion", value: dailyRitualCompletionLabel)
+                metricRow(label: "Habit completion", value: dailyHabitCompletionLabel)
 
                 if selectedDayRelation != .future {
-                    ritualProgressBar(ratio: dailyRitualSummary.ratio)
+                    habitProgressBar(ratio: dailyHabitSummary.ratio)
                 }
 
                 Button(showingIdentityDetails ? "Hide details" : "View details") {
@@ -901,10 +901,10 @@ struct ReviewView: View {
         .surfaceCard(style: .accentTint, cornerRadius: Theme.radiusSmall)
     }
 
-    private var dailyRitualCompletionLabel: String {
+    private var dailyHabitCompletionLabel: String {
         guard selectedDayRelation != .future else { return "—" }
-        guard dailyRitualSummary.total > 0 else { return "Not set" }
-        return "\(dailyRitualSummary.completed) of \(dailyRitualSummary.total)"
+        guard dailyHabitSummary.total > 0 else { return "Not set" }
+        return "\(dailyHabitSummary.completed) of \(dailyHabitSummary.total)"
     }
 
     private var monthlyReview: some View {
@@ -1049,12 +1049,12 @@ struct ReviewView: View {
     }
 
     private func monthHeatmapCell(for day: Date) -> some View {
-        let summary = selectedMonthSummaries[day, default: RitualDaySummary(total: 0, completed: 0)]
+        let summary = selectedMonthSummaries[day, default: HabitDaySummary(total: 0, completed: 0)]
         let ratio = summary.ratio
 
         return ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(heatmapFill(for: day, ratio: ratio, hasRituals: summary.total > 0))
+                .fill(heatmapFill(for: day, ratio: ratio, hasHabits: summary.total > 0))
 
             Text(day.formatted(.dateTime.day()))
                 .font(Theme.Typography.caption.weight(.semibold))
@@ -1063,11 +1063,11 @@ struct ReviewView: View {
         .frame(height: 32)
     }
 
-    private func heatmapFill(for day: Date, ratio: Double, hasRituals: Bool) -> Color {
+    private func heatmapFill(for day: Date, ratio: Double, hasHabits: Bool) -> Color {
         if day > todayStart {
             return Theme.surface2.opacity(0.56)
         }
-        guard hasRituals else {
+        guard hasHabits else {
             return Theme.surface2.opacity(0.78)
         }
         if ratio == 0 {
@@ -1092,7 +1092,7 @@ struct ReviewView: View {
                     value: weekdayPatternValue(name: pattern.lowestName, percent: pattern.lowestPercent)
                 )
             } else {
-                Text("Weekday patterns will appear as ritual data accumulates.")
+                Text("Weekday patterns will appear as habit data accumulates.")
                     .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -1107,10 +1107,10 @@ struct ReviewView: View {
                 .foregroundStyle(Theme.text)
 
             ForEach(TimeBucket.allCases) { bucket in
-                let ritualCompletions = monthlyRitualCompletionsByBucket[bucket, default: 0]
+                let habitCompletions = monthlyHabitCompletionsByBucket[bucket, default: 0]
                 let focusMinutes = monthlyFocusMinutesByBucket[bucket, default: 0]
-                let isStrongest = monthlyStrongestRitualCompletionCount > 0
-                    && ritualCompletions == monthlyStrongestRitualCompletionCount
+                let isStrongest = monthlyStrongestHabitCompletionCount > 0
+                    && habitCompletions == monthlyStrongestHabitCompletionCount
 
                 HStack {
                     Text(bucket.label)
@@ -1119,7 +1119,7 @@ struct ReviewView: View {
 
                     Spacer(minLength: 0)
 
-                    Text("Rituals \(ritualCompletions)")
+                    Text("Habits \(habitCompletions)")
                         .font(isStrongest ? Theme.Typography.caption.weight(.semibold) : Theme.Typography.caption)
                         .foregroundStyle(isStrongest ? Theme.text : Theme.textSecondary)
 
@@ -1176,12 +1176,12 @@ struct ReviewView: View {
             }
 
             if habits.isEmpty {
-                Text("No rituals yet.")
+                Text("No habits yet.")
                     .font(Theme.Typography.bodySmallStrong)
                     .foregroundStyle(Theme.text)
 
-                Button("Add a ritual") {
-                    showingManageRituals = true
+                Button("Add a habit") {
+                    showingManageHabits = true
                 }
                 .font(Theme.Typography.bodySmallStrong)
                 .tint(Theme.accent)
@@ -1424,11 +1424,11 @@ struct ReviewView: View {
                let lowRate = monthlyCorrelation.lowFocusRatePercent {
                 metricRow(
                     label: "On \(monthlyCorrelation.thresholdMinutes)m+ focus days",
-                    value: "Rituals fully complete \(highRate)%"
+                    value: "Habits fully complete \(highRate)%"
                 )
                 metricRow(
                     label: "On <\(monthlyCorrelation.thresholdMinutes)m focus days",
-                    value: "Rituals fully complete \(lowRate)%"
+                    value: "Habits fully complete \(lowRate)%"
                 )
             } else {
                 Text("Not enough data yet.")
@@ -1514,25 +1514,25 @@ struct ReviewView: View {
     }
 
     private func alignmentLabel(
-        ritualsComplete: Bool,
+        habitsComplete: Bool,
         focusMinutes: Int,
         hasFocusTracking: Bool
     ) -> String {
-        guard hasFocusTracking else { return "Ritual-focused day" }
+        guard hasFocusTracking else { return "Habit-focused day" }
 
-        if ritualsComplete && focusMinutes >= dailyFocusHighMinutes {
+        if habitsComplete && focusMinutes >= dailyFocusHighMinutes {
             return "High-alignment day"
         }
-        if ritualsComplete && focusMinutes < dailyFocusSomeMinutes {
-            return "Ritual-focused day"
+        if habitsComplete && focusMinutes < dailyFocusSomeMinutes {
+            return "Habit-focused day"
         }
-        if !ritualsComplete && focusMinutes >= dailyFocusSomeMinutes {
+        if !habitsComplete && focusMinutes >= dailyFocusSomeMinutes {
             return "Output-heavy day"
         }
-        if !ritualsComplete && focusMinutes < dailyFocusSomeMinutes {
+        if !habitsComplete && focusMinutes < dailyFocusSomeMinutes {
             return "Low-activation day"
         }
-        return "Ritual-focused day"
+        return "Habit-focused day"
     }
 
     private func meaningfulLeadingBucket(from values: [TimeBucket: Int], minimumTotal: Int) -> TimeBucket? {
@@ -1546,7 +1546,7 @@ struct ReviewView: View {
         return strongestBuckets.first
     }
 
-    private func ritualProgressBar(ratio: Double) -> some View {
+    private func habitProgressBar(ratio: Double) -> some View {
         ZStack(alignment: .leading) {
             Capsule(style: .continuous)
                 .fill(Theme.surface2)
@@ -1636,16 +1636,16 @@ struct ReviewView: View {
         return (start, end, calendar.startOfDay(for: evaluationEnd))
     }
 
-    private func ritualSummary(for day: Date) -> RitualDaySummary {
+    private func habitSummary(for day: Date) -> HabitDaySummary {
         let target = calendar.startOfDay(for: day)
         let activeForDay = habits.filter { isHabit($0, activeOn: target) }
-        guard !activeForDay.isEmpty else { return RitualDaySummary(total: 0, completed: 0) }
+        guard !activeForDay.isEmpty else { return HabitDaySummary(total: 0, completed: 0) }
 
         let completedIDs = completionIDsByDay[target] ?? []
         let completedCount = activeForDay.reduce(0) { partial, habit in
             partial + (completedIDs.contains(habit.id) ? 1 : 0)
         }
-        return RitualDaySummary(total: activeForDay.count, completed: completedCount)
+        return HabitDaySummary(total: activeForDay.count, completed: completedCount)
     }
 
     private func metrics(for monthStart: Date) -> MonthMetrics {
@@ -1662,7 +1662,7 @@ struct ReviewView: View {
         var run = 0
 
         for day in days {
-            let summary = ritualSummary(for: day)
+            let summary = habitSummary(for: day)
             guard summary.total > 0 else { continue }
             activeDays += 1
             if summary.isComplete {
@@ -1701,7 +1701,7 @@ struct ReviewView: View {
 
         let weekdayRates: [(weekday: Int, rate: Double)] = grouped.compactMap { weekday, entries in
             let ratios = entries.compactMap { day -> Double? in
-                let summary = ritualSummary(for: day)
+                let summary = habitSummary(for: day)
                 guard summary.total > 0 else { return nil }
                 return summary.ratio
             }
@@ -1824,13 +1824,13 @@ struct ReviewView: View {
             focusMinutesByDay[day, default: 0] += max(0, session.durationSeconds / 60)
         }
 
-        let evaluableDays = days.filter { ritualSummary(for: $0).total > 0 }
+        let evaluableDays = days.filter { habitSummary(for: $0).total > 0 }
         let highDays = evaluableDays.filter { focusMinutesByDay[$0, default: 0] >= thresholdMinutes }
         let lowDays = evaluableDays.filter { focusMinutesByDay[$0, default: 0] < thresholdMinutes }
 
         func fullRate(for days: [Date]) -> Int? {
             guard !days.isEmpty else { return nil }
-            let fullCount = days.filter { ritualSummary(for: $0).isComplete }.count
+            let fullCount = days.filter { habitSummary(for: $0).isComplete }.count
             return Int((Double(fullCount) / Double(days.count) * 100).rounded())
         }
 
@@ -1844,7 +1844,7 @@ struct ReviewView: View {
     }
 
     private func isHabit(_ habit: Habit, activeOn day: Date) -> Bool {
-        RitualAnalytics.isHabit(
+        HabitAnalytics.isHabit(
             habit,
             activeOn: day,
             today: todayStart,

@@ -20,11 +20,15 @@ struct DayDetailView: View {
     @Query(sort: [SortDescriptor(\FocusSession.startedAt, order: .reverse)])
     private var sessions: [FocusSession]
 
+    @Query(sort: [SortDescriptor(\Appointment.startDate, order: .forward)])
+    private var appointments: [Appointment]
+
     let day: Date
 
     @State private var showingToast = false
     @State private var toastMessage = ""
     @State private var toastDismissWorkItem: DispatchWorkItem?
+    @State private var appointmentEditorContext: AppointmentEditorContext?
 
     private enum DateRelation {
         case past
@@ -32,7 +36,13 @@ struct DayDetailView: View {
         case future
     }
 
-    private struct RitualSummary {
+    private struct AppointmentEditorContext: Identifiable {
+        let id = UUID()
+        let appointment: Appointment?
+        let defaultStartDate: Date
+    }
+
+    private struct HabitSummary {
         let total: Int
         let completed: Int
 
@@ -56,11 +66,11 @@ struct DayDetailView: View {
         dayStart.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
-    private var ritualsForDay: [Habit] {
+    private var habitsForDay: [Habit] {
         habits.filter { isHabit($0, activeOn: dayStart) }
     }
 
-    private var completedRitualIDs: Set<UUID> {
+    private var completedHabitIDs: Set<UUID> {
         Set(
             completions
                 .filter { calendar.isDate($0.day, inSameDayAs: dayStart) }
@@ -68,24 +78,24 @@ struct DayDetailView: View {
         )
     }
 
-    private var ritualSummary: RitualSummary {
-        let completed = ritualsForDay.reduce(0) { count, habit in
-            count + (completedRitualIDs.contains(habit.id) ? 1 : 0)
+    private var habitSummary: HabitSummary {
+        let completed = habitsForDay.reduce(0) { count, habit in
+            count + (completedHabitIDs.contains(habit.id) ? 1 : 0)
         }
-        return RitualSummary(total: ritualsForDay.count, completed: completed)
+        return HabitSummary(total: habitsForDay.count, completed: completed)
     }
 
     private var statusLine: String {
         if dateRelation == .future {
             return "Upcoming"
         }
-        if ritualSummary.isComplete {
-            return "Rituals complete."
+        if habitSummary.isComplete {
+            return "Habits complete."
         }
-        if ritualSummary.total == 0 {
-            return "0 rituals kept"
+        if habitSummary.total == 0 {
+            return "0 habits kept"
         }
-        return "\(ritualSummary.completed) of \(ritualSummary.total) rituals complete"
+        return "\(habitSummary.completed) of \(habitSummary.total) habits complete"
     }
 
     private var tasksForDay: [TaskItem] {
@@ -102,6 +112,20 @@ struct DayDetailView: View {
             }
     }
 
+    private var appointmentsForDay: [Appointment] {
+        appointments
+            .filter { AppointmentPresentation.occurs($0, on: dayStart, calendar: calendar) }
+            .sorted { lhs, rhs in
+                if lhs.isAllDay != rhs.isAllDay {
+                    return lhs.isAllDay && !rhs.isAllDay
+                }
+                if lhs.startDate != rhs.startDate {
+                    return lhs.startDate < rhs.startDate
+                }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+    }
+
     private var focusSecondsForDay: Int {
         let end = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? .distantFuture
         return sessions
@@ -115,7 +139,8 @@ struct DayDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                         headerCard
-                        ritualsCard
+                        habitsCard
+                        appointmentsCard
                         supportCard
                     }
                     .padding(Theme.Spacing.md)
@@ -144,6 +169,14 @@ struct DayDetailView: View {
             .navigationTitle(dayTitle)
             .navigationBarTitleDisplayMode(.inline)
             .animation(.snappy(duration: 0.18), value: showingToast)
+        }
+        .sheet(item: $appointmentEditorContext) { context in
+            AppointmentEditorSheet(
+                appointment: context.appointment,
+                defaultStartDate: context.defaultStartDate
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .onDisappear {
             toastDismissWorkItem?.cancel()
@@ -177,21 +210,21 @@ struct DayDetailView: View {
         .surfaceCard(style: .primary, cornerRadius: Theme.radiusSmall)
     }
 
-    private var ritualsCard: some View {
+    private var habitsCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Rituals")
+            Text("Habits")
                 .font(Theme.Typography.sectionLabel)
                 .tracking(Theme.Typography.sectionTracking)
                 .foregroundStyle(Theme.textSecondary.opacity(0.86))
 
-            if ritualsForDay.isEmpty {
-                Text("No rituals for this day.")
+            if habitsForDay.isEmpty {
+                Text("No habits for this day.")
                     .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
             } else {
                 VStack(spacing: Theme.Spacing.xxs) {
-                    ForEach(ritualsForDay) { habit in
-                        ritualRow(for: habit)
+                    ForEach(habitsForDay) { habit in
+                        habitRow(for: habit)
                     }
                 }
             }
@@ -200,12 +233,12 @@ struct DayDetailView: View {
         .surfaceCard(style: .primary, cornerRadius: Theme.radiusSmall)
     }
 
-    private func ritualRow(for habit: Habit) -> some View {
-        let isCompleted = completedRitualIDs.contains(habit.id)
+    private func habitRow(for habit: Habit) -> some View {
+        let isCompleted = completedHabitIDs.contains(habit.id)
         let isPast = dateRelation == .past
 
         return Button {
-            handleRitualTap(habit, isCompleted: isCompleted)
+            handleHabitTap(habit, isCompleted: isCompleted)
         } label: {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: isCompleted ? "checkmark.circle.fill" : (dateRelation == .future ? "circle.dashed" : "circle"))
@@ -237,6 +270,49 @@ struct DayDetailView: View {
         }
         .buttonStyle(.plain)
         .disabled(isPast)
+    }
+
+    private var appointmentsCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Appointments")
+                    .font(Theme.Typography.sectionLabel)
+                    .tracking(Theme.Typography.sectionTracking)
+                    .foregroundStyle(Theme.textSecondary.opacity(0.86))
+
+                Spacer(minLength: 0)
+
+                Button {
+                    openNewAppointmentEditor()
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(Theme.Typography.iconCompact)
+                        .foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add appointment")
+            }
+
+            if appointmentsForDay.isEmpty {
+                Text("No appointments for this day.")
+                    .font(Theme.Typography.bodySmall)
+                    .foregroundStyle(Theme.textSecondary)
+            } else {
+                VStack(spacing: Theme.Spacing.xxs) {
+                    ForEach(appointmentsForDay) { appointment in
+                        AppointmentRow(
+                            appointment: appointment,
+                            day: dayStart,
+                            onTap: appointment.source == .manual ? {
+                                openAppointmentEditor(appointment)
+                            } : nil
+                        )
+                    }
+                }
+            }
+        }
+        .padding(Theme.Spacing.cardInset)
+        .surfaceCard(style: .primary, cornerRadius: Theme.radiusSmall)
     }
 
     private var supportCard: some View {
@@ -319,14 +395,34 @@ struct DayDetailView: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Theme.textSecondary.opacity(0.08), lineWidth: 0.8)
+            .stroke(Theme.textSecondary.opacity(0.08), lineWidth: 0.8)
         }
     }
 
-    private func handleRitualTap(_ habit: Habit, isCompleted: Bool) {
+    private func openNewAppointmentEditor() {
+        let defaultStart: Date
+        if dateRelation == .today {
+            defaultStart = max(Date(), dayStart)
+        } else {
+            defaultStart = calendar.date(byAdding: .hour, value: 9, to: dayStart) ?? dayStart
+        }
+        appointmentEditorContext = AppointmentEditorContext(
+            appointment: nil,
+            defaultStartDate: defaultStart
+        )
+    }
+
+    private func openAppointmentEditor(_ appointment: Appointment) {
+        appointmentEditorContext = AppointmentEditorContext(
+            appointment: appointment,
+            defaultStartDate: appointment.startDate
+        )
+    }
+
+    private func handleHabitTap(_ habit: Habit, isCompleted: Bool) {
         switch dateRelation {
         case .future:
-            showToast("Rituals can be completed on the day.")
+            showToast("Habits can be completed on the day.")
         case .past:
             return
         case .today:
@@ -366,7 +462,7 @@ struct DayDetailView: View {
     }
 
     private func isHabit(_ habit: Habit, activeOn day: Date) -> Bool {
-        RitualAnalytics.isHabit(
+        HabitAnalytics.isHabit(
             habit,
             activeOn: day,
             today: todayStart,
