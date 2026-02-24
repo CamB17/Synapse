@@ -11,12 +11,26 @@ struct ReviewView: View {
     @Query(sort: [SortDescriptor(\Habit.createdAt, order: .forward)])
     private var habits: [Habit]
 
+    @Query(sort: [SortDescriptor(\HabitCompletion.day, order: .reverse)])
+    private var habitCompletions: [HabitCompletion]
+
+    @Query(sort: [SortDescriptor(\HabitPausePeriod.startDay, order: .reverse)])
+    private var habitPausePeriods: [HabitPausePeriod]
+
     @State private var mode: ReviewMode = .daily
 
-    private var calendar: Calendar { .current }
-    private var todayStart: Date { calendar.startOfDay(for: .now) }
-    private var monthStart: Date {
-        calendar.date(from: calendar.dateComponents([.year, .month], from: todayStart)) ?? todayStart
+    private struct RitualDaySummary {
+        let total: Int
+        let completed: Int
+
+        var ratio: CGFloat {
+            guard total > 0 else { return 0 }
+            return CGFloat(completed) / CGFloat(total)
+        }
+
+        var isComplete: Bool {
+            total > 0 && completed == total
+        }
     }
 
     private enum ReviewMode: String, CaseIterable, Identifiable {
@@ -26,39 +40,32 @@ struct ReviewView: View {
         var id: String { rawValue }
     }
 
-    private var activeHabits: [Habit] {
-        habits.filter(\.isActive)
+    private var calendar: Calendar { .current }
+    private var todayStart: Date { calendar.startOfDay(for: .now) }
+    private var monthStart: Date {
+        calendar.date(from: calendar.dateComponents([.year, .month], from: todayStart)) ?? todayStart
+    }
+    private var monthEnd: Date {
+        calendar.date(byAdding: .month, value: 1, to: monthStart) ?? .distantFuture
     }
 
-    private var completedHabitsToday: Int {
-        activeHabits.filter(\.completedToday).count
+    private var dailyRitualSummary: RitualDaySummary {
+        ritualSummary(for: todayStart)
     }
 
-    private var dailyAssignedTasks: [TaskItem] {
-        tasks.filter { task in
-            task.state == .today || task.state == .completed
-        }
-        .filter { task in
-            calendar.isDate(assignmentDay(for: task), inSameDayAs: todayStart)
-        }
+    private var dailyRitualCompletionValue: String {
+        guard dailyRitualSummary.total > 0 else { return "Not set" }
+        return "\(dailyRitualSummary.completed) of \(dailyRitualSummary.total)"
+    }
+
+    private var dailyRitualConsistency: Int {
+        Int((dailyRitualSummary.ratio * 100).rounded())
     }
 
     private var dailyCompletedTasks: [TaskItem] {
         tasks.filter { task in
             task.state == .completed && calendar.isDate(assignmentDay(for: task), inSameDayAs: todayStart)
         }
-    }
-
-    private var dailyCompletionPercent: Int {
-        guard !dailyAssignedTasks.isEmpty else { return 0 }
-        let raw = (Double(dailyCompletedTasks.count) / Double(dailyAssignedTasks.count)) * 100
-        return Int(raw.rounded())
-    }
-
-    private var dailyRitualConsistency: Int {
-        guard !activeHabits.isEmpty else { return 0 }
-        let raw = (Double(completedHabitsToday) / Double(activeHabits.count)) * 100
-        return Int(raw.rounded())
     }
 
     private var dailyFocusSeconds: Int {
@@ -74,26 +81,25 @@ struct ReviewView: View {
         }
     }
 
-    private var maxDailyTrendCompletions: Int {
-        max(1, dailyTrendDays.map { dailyTaskSummary(for: $0).completed }.max() ?? 0)
+    private var maxDailyTrendRatio: CGFloat {
+        max(0.25, dailyTrendDays.map { ritualSummary(for: $0).ratio }.max() ?? 0)
     }
 
     private var dailyInsightLine: String {
-        if dailyCompletionPercent >= 80 && dailyRitualConsistency >= 80 {
-            return "Strong execution day. Keep tomorrow equally simple."
+        if dailyRitualSummary.total == 0 {
+            return "Add one ritual to begin your daily foundation."
         }
-        if dailyCompletedTasks.isEmpty {
-            return "One completed task creates momentum faster than planning more."
+        if dailyRitualSummary.isComplete {
+            return "Identity reinforced through consistency."
         }
         if dailyRitualConsistency < 50 {
-            return "Ritual consistency is the easiest lever to stabilize execution."
+            return "Protect one ritual first. Momentum follows."
         }
-        return "Progress is steady. Protect focus blocks and keep priorities tight."
+        return "Another steady day of alignment."
     }
 
     private var monthDays: [Date?] {
         guard let range = calendar.range(of: .day, in: .month, for: monthStart) else { return [] }
-
         let firstWeekday = calendar.component(.weekday, from: monthStart)
         let leading = (firstWeekday - calendar.firstWeekday + 7) % 7
 
@@ -103,7 +109,6 @@ struct ReviewView: View {
                 cells.append(date)
             }
         }
-
         while cells.count % 7 != 0 {
             cells.append(nil)
         }
@@ -116,50 +121,43 @@ struct ReviewView: View {
         return Array(symbols[start...]) + Array(symbols[..<start])
     }
 
-    private var monthTaskSummaries: [Date: (assigned: Int, completed: Int)] {
-        let monthEnd = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? .distantFuture
-        let monthTasks = tasks.filter { task in
-            let day = assignmentDay(for: task)
-            return day >= monthStart && day < monthEnd && (task.state == .today || task.state == .completed)
-        }
+    private var monthRitualSummaries: [Date: RitualDaySummary] {
+        guard let range = calendar.range(of: .day, in: .month, for: monthStart) else { return [:] }
 
-        return Dictionary(grouping: monthTasks) { task in
-            assignmentDay(for: task)
+        var summaries: [Date: RitualDaySummary] = [:]
+        for day in range {
+            guard let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart) else { continue }
+            let start = calendar.startOfDay(for: date)
+            summaries[start] = ritualSummary(for: start)
         }
-        .mapValues { items in
-            let assigned = items.count
-            let completed = items.filter { $0.state == .completed }.count
-            return (assigned, completed)
-        }
+        return summaries
     }
 
     private var monthlyBestStreak: Int {
-        let completionDays = monthTaskSummaries
-            .filter { _, summary in summary.completed > 0 }
-            .keys
-            .sorted()
+        let monthDates = monthRitualSummaries.keys.sorted()
+        var best = 0
+        var run = 0
 
-        guard !completionDays.isEmpty else { return 0 }
-
-        var best = 1
-        var run = 1
-        for index in 1..<completionDays.count {
-            let previous = completionDays[index - 1]
-            let expected = calendar.date(byAdding: .day, value: 1, to: previous) ?? previous
-            if calendar.isDate(completionDays[index], inSameDayAs: expected) {
+        for day in monthDates {
+            let summary = monthRitualSummaries[day] ?? RitualDaySummary(total: 0, completed: 0)
+            if summary.total == 0 {
+                continue
+            }
+            if summary.isComplete {
                 run += 1
                 best = max(best, run)
             } else {
-                run = 1
+                run = 0
             }
         }
+
         return best
     }
 
-    private var monthlyAverageExecutionPercent: Int {
-        let values = monthTaskSummaries.values.compactMap { summary -> Double? in
-            guard summary.assigned > 0 else { return nil }
-            return Double(summary.completed) / Double(summary.assigned)
+    private var monthlyAverageConsistencyPercent: Int {
+        let values = monthRitualSummaries.values.compactMap { summary -> Double? in
+            guard summary.total > 0 else { return nil }
+            return Double(summary.completed) / Double(summary.total)
         }
 
         guard !values.isEmpty else { return 0 }
@@ -168,16 +166,17 @@ struct ReviewView: View {
     }
 
     private var monthlyWeekdayStrength: (strongest: String, weakest: String)? {
-        let groupedByWeekday = Dictionary(grouping: monthTaskSummaries) { entry in
+        let groupedByWeekday = Dictionary(grouping: monthRitualSummaries) { entry in
             calendar.component(.weekday, from: entry.key)
         }
 
-        let averages: [(weekday: Int, score: Double)] = groupedByWeekday.map { weekday, entries in
+        let averages: [(weekday: Int, score: Double)] = groupedByWeekday.compactMap { weekday, entries in
             let values = entries.compactMap { _, summary -> Double? in
-                guard summary.assigned > 0 else { return nil }
-                return Double(summary.completed) / Double(summary.assigned)
+                guard summary.total > 0 else { return nil }
+                return Double(summary.completed) / Double(summary.total)
             }
-            let average = values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
+            guard !values.isEmpty else { return nil }
+            let average = values.reduce(0, +) / Double(values.count)
             return (weekday, average)
         }
 
@@ -188,7 +187,6 @@ struct ReviewView: View {
 
         let strongestName = calendar.weekdaySymbols[max(0, min(calendar.weekdaySymbols.count - 1, strongest.weekday - 1))]
         let weakestName = calendar.weekdaySymbols[max(0, min(calendar.weekdaySymbols.count - 1, weakest.weekday - 1))]
-
         return (strongestName, weakestName)
     }
 
@@ -227,34 +225,53 @@ struct ReviewView: View {
 
     private var dailyReview: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Daily graph")
-                .font(Theme.Typography.caption)
-                .foregroundStyle(Theme.textSecondary)
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                Text("Rituals")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.textSecondary)
 
-            dailyTrendStrip
+                dailyTrendStrip
 
-            metricRow(label: "Completion %", value: "\(dailyCompletionPercent)%")
-            metricRow(label: "Ritual consistency", value: "\(dailyRitualConsistency)%")
-            metricRow(label: "Task throughput", value: "\(dailyCompletedTasks.count)")
-            metricRow(label: "Focus time", value: formatMinutes(dailyFocusSeconds))
+                metricRow(label: "Ritual completion", value: dailyRitualCompletionValue)
+                metricRow(label: "Consistency", value: "\(dailyRitualConsistency)%")
 
-            Text(dailyInsightLine)
-                .font(Theme.Typography.bodySmall)
-                .foregroundStyle(Theme.textSecondary)
-                .padding(.top, Theme.Spacing.xs)
+                Text(dailyInsightLine)
+                    .font(Theme.Typography.bodySmall)
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.top, Theme.Spacing.xs)
+            }
+            .padding(Theme.Spacing.cardInset)
+            .surfaceCard()
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text("Support")
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.textSecondary.opacity(0.88))
+
+                metricRow(
+                    label: "Tasks completed",
+                    value: "\(dailyCompletedTasks.count)",
+                    valueColor: Theme.textSecondary.opacity(0.9)
+                )
+                metricRow(
+                    label: "Focus minutes",
+                    value: formatMinutes(dailyFocusSeconds),
+                    valueColor: Theme.textSecondary.opacity(0.9)
+                )
+            }
+            .padding(Theme.Spacing.cardInset)
+            .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
         }
-        .padding(Theme.Spacing.cardInset)
-        .surfaceCard()
     }
 
     private var dailyTrendStrip: some View {
         HStack(alignment: .bottom, spacing: Theme.Spacing.xxs) {
             ForEach(dailyTrendDays, id: \.self) { day in
-                let summary = dailyTaskSummary(for: day)
-                let normalized = CGFloat(summary.completed) / CGFloat(maxDailyTrendCompletions)
+                let ratio = ritualSummary(for: day).ratio
+                let normalized = ratio / maxDailyTrendRatio
 
                 RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                    .fill(Theme.accent.opacity(summary.completed == 0 ? 0.12 : 0.24 + (0.32 * normalized)))
+                    .fill(Theme.accent.opacity(ratio == 0 ? 0.1 : 0.2 + (0.35 * normalized)))
                     .frame(maxWidth: .infinity)
                     .frame(height: 6 + (18 * normalized))
                     .overlay(alignment: .bottom) {
@@ -278,7 +295,7 @@ struct ReviewView: View {
             monthHeatmap
 
             metricRow(label: "Best streak", value: "\(monthlyBestStreak) day\(monthlyBestStreak == 1 ? "" : "s")")
-            metricRow(label: "Avg execution %", value: "\(monthlyAverageExecutionPercent)%")
+            metricRow(label: "Average consistency", value: "\(monthlyAverageConsistencyPercent)%")
 
             if let weekdayStrength = monthlyWeekdayStrength {
                 metricRow(label: "Strongest weekday", value: weekdayStrength.strongest)
@@ -334,17 +351,12 @@ struct ReviewView: View {
     }
 
     private func heatmapCell(for day: Date) -> some View {
-        let summary = monthTaskSummaries[calendar.startOfDay(for: day), default: (assigned: 0, completed: 0)]
-        let ratio: CGFloat
-        if summary.assigned == 0 {
-            ratio = 0
-        } else {
-            ratio = CGFloat(summary.completed) / CGFloat(summary.assigned)
-        }
+        let summary = monthRitualSummaries[calendar.startOfDay(for: day), default: RitualDaySummary(total: 0, completed: 0)]
+        let ratio = summary.ratio
 
         return ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(summary.assigned == 0 ? Theme.surface2 : Theme.accent.opacity(0.12 + (0.58 * ratio)))
+                .fill(summary.total == 0 ? Theme.surface2 : Theme.accent.opacity(0.12 + (0.58 * ratio)))
 
             Text(day.formatted(.dateTime.day()))
                 .font(Theme.Typography.caption.weight(.semibold))
@@ -353,7 +365,7 @@ struct ReviewView: View {
         .frame(height: 32)
     }
 
-    private func metricRow(label: String, value: String) -> some View {
+    private func metricRow(label: String, value: String, valueColor: Color = Theme.text) -> some View {
         HStack {
             Text(label)
                 .font(Theme.Typography.bodySmall)
@@ -363,21 +375,44 @@ struct ReviewView: View {
 
             Text(value)
                 .font(Theme.Typography.bodySmallStrong)
-                .foregroundStyle(Theme.text)
+                .foregroundStyle(valueColor)
                 .contentTransition(.numericText())
         }
     }
 
-    private func dailyTaskSummary(for day: Date) -> (assigned: Int, completed: Int) {
+    private func ritualSummary(for day: Date) -> RitualDaySummary {
         let target = calendar.startOfDay(for: day)
-        let assigned = tasks.filter { task in
-            (task.state == .today || task.state == .completed)
-                && calendar.isDate(assignmentDay(for: task), inSameDayAs: target)
-        }.count
-        let completed = tasks.filter { task in
-            task.state == .completed && calendar.isDate(assignmentDay(for: task), inSameDayAs: target)
-        }.count
-        return (assigned, completed)
+        let activeForDay = habits.filter { isHabit($0, activeOn: target) }
+        guard !activeForDay.isEmpty else { return RitualDaySummary(total: 0, completed: 0) }
+
+        let completedIDs = Set(
+            habitCompletions
+                .filter { calendar.isDate($0.day, inSameDayAs: target) }
+                .map(\.habitId)
+        )
+        let completedCount = activeForDay.reduce(0) { partial, habit in
+            partial + (completedIDs.contains(habit.id) ? 1 : 0)
+        }
+        return RitualDaySummary(total: activeForDay.count, completed: completedCount)
+    }
+
+    private func isHabit(_ habit: Habit, activeOn day: Date) -> Bool {
+        let dayStart = calendar.startOfDay(for: day)
+        let createdDay = calendar.startOfDay(for: habit.createdAt)
+        guard dayStart >= createdDay else { return false }
+
+        let periods = habitPausePeriods.filter { $0.habitId == habit.id }
+        if !habit.isActive, periods.allSatisfy({ $0.endDay != nil }), dayStart >= todayStart {
+            return false
+        }
+        for period in periods {
+            let start = calendar.startOfDay(for: period.startDay)
+            let end = calendar.startOfDay(for: period.endDay ?? .distantFuture)
+            if dayStart >= start && dayStart < end {
+                return false
+            }
+        }
+        return true
     }
 
     private func assignmentDay(for task: TaskItem) -> Date {

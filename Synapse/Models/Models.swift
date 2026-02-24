@@ -12,6 +12,14 @@ enum TaskPriority: String, Codable, CaseIterable {
     case medium
     case low
 
+    var displayLabel: String {
+        switch self {
+        case .high: return "Focus"
+        case .medium: return "Support"
+        case .low: return "Flexible"
+        }
+    }
+
     var sortRank: Int {
         switch self {
         case .high: return 0

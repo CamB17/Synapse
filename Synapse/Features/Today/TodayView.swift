@@ -215,29 +215,72 @@ struct TodayView: View {
             return "No rituals set yet"
         }
         if allRitualsComplete {
-            return "Rituals complete."
+            return dayRotationSeed.isMultiple(of: 2) ? "Rituals complete." : "Identity reinforced."
         }
-        return "\(todayRitualSummary.completed) of \(todayRitualSummary.total) rituals complete"
+        switch dayRotationSeed % 3 {
+        case 0:
+            return "\(todayRitualSummary.completed) \(ritualWord(for: todayRitualSummary.completed)) honored"
+        case 1:
+            return "\(todayRitualSummary.completed) of \(todayRitualSummary.total) \(foundationWord(for: todayRitualSummary.total)) complete"
+        default:
+            return "\(todayRitualSummary.completed) \(ritualWord(for: todayRitualSummary.completed)) kept"
+        }
     }
 
     private var currentStreak: Int {
         guard !habits.isEmpty else { return 0 }
 
+        let earliestHabitDay = habits
+            .map { calendar.startOfDay(for: $0.createdAt) }
+            .min() ?? todayStart
+
         var streak = 0
         var cursor = todayStart
-        while ritualSummary(for: cursor).isComplete {
+        var scannedDays = 0
+
+        while cursor >= earliestHabitDay && scannedDays < 3650 {
+            let summary = ritualSummary(for: cursor)
+            if summary.total == 0 {
+                guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+                cursor = previous
+                scannedDays += 1
+                continue
+            }
+            guard summary.isComplete else { break }
             streak += 1
             guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
             cursor = previous
+            scannedDays += 1
         }
         return streak
     }
 
     private var headerMomentumLine: String {
-        if currentStreak > 0 {
-            return "\(currentStreak) day streak"
+        switch streakPresentation {
+        case .ongoing(let day):
+            return "Streak: Day \(day)"
+        case .freshStart:
+            return "New streak"
+        case .restart:
+            return "New streak begins."
         }
-        return hasAnyCompletedRitualDay ? "New streak begins." : "0 day streak"
+    }
+
+    private var streakPresentation: StreakPresentation {
+        if currentStreak > 0 {
+            return .ongoing(currentStreak)
+        }
+        return hasAnyCompletedRitualDay ? .restart : .freshStart
+    }
+
+    private var completionAffirmationLine: String? {
+        guard allRitualsComplete else { return nil }
+        let options = [
+            "Consistency builds identity.",
+            "Another day aligned.",
+            "You kept your word to yourself."
+        ]
+        return options[dayRotationSeed % options.count]
     }
 
     private var hasAnyCompletedRitualDay: Bool {
@@ -259,6 +302,10 @@ struct TodayView: View {
         Self.partOfDay(at: .now, calendar: calendar)
     }
 
+    private var dayRotationSeed: Int {
+        calendar.ordinality(of: .day, in: .year, for: todayStart) ?? 0
+    }
+
     private struct RitualDaySummary {
         let total: Int
         let completed: Int
@@ -271,6 +318,12 @@ struct TodayView: View {
             guard total > 0 else { return 0 }
             return CGFloat(completed) / CGFloat(total)
         }
+    }
+
+    private enum StreakPresentation {
+        case ongoing(Int)
+        case freshStart
+        case restart
     }
 
     var body: some View {
@@ -462,6 +515,12 @@ struct TodayView: View {
                 .font(.system(size: 11, weight: .medium, design: .rounded))
                 .foregroundStyle(Theme.textSecondary.opacity(0.78))
                 .contentTransition(.numericText())
+
+            if let completionAffirmationLine {
+                Text(completionAffirmationLine)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.textSecondary.opacity(0.72))
+            }
         }
         .padding(.horizontal, Theme.Spacing.cardInset)
         .padding(.vertical, 10)
@@ -641,8 +700,8 @@ struct TodayView: View {
         }
 
         guard triggerSuccess else { return }
-        let success = UINotificationFeedbackGenerator()
-        success.notificationOccurred(.success)
+        let feedback = UIImpactFeedbackGenerator(style: .soft)
+        feedback.impactOccurred()
 
         withAnimation(.easeOut(duration: 0.2)) {
             headerCompletionGlow = true
@@ -676,20 +735,15 @@ struct TodayView: View {
 
     private var focusSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xxs) {
-                Image(systemName: "scope")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Theme.accent.opacity(0.5))
-
-                Text("Focus")
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .tracking(0.2)
-                    .foregroundStyle(Theme.textSecondary)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Execution")
+                    .font(Theme.Typography.sectionLabel)
+                    .tracking(Theme.Typography.sectionTracking)
+                    .foregroundStyle(Theme.textSecondary.opacity(0.86))
 
                 Text(formatMinutes(totalFocusSecondsSelectedDay))
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.textSecondary.opacity(0.78))
                     .contentTransition(.numericText())
 
                 Spacer(minLength: 0)
@@ -748,7 +802,7 @@ struct TodayView: View {
             .scrollIndicators(.hidden)
 
             if highPriorityTasks.count > 5 {
-                Text("Consider limiting High priority to 3–5 tasks.")
+                Text("Consider keeping Focus tasks to 3-5.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -761,8 +815,8 @@ struct TodayView: View {
             if visibleFocusTasks.isEmpty {
                 EmptyStatePanel(
                     symbol: isFocusMode ? "timer" : "checklist",
-                    title: isFocusMode ? "No high-priority tasks" : "No focus tasks yet",
-                    subtitle: isFocusMode ? "Mark one task as High to enter focus flow." : "Assign from Inbox or capture a task."
+                    title: isFocusMode ? "No focus task selected" : "No tasks yet",
+                    subtitle: isFocusMode ? "Choose one task marked Focus to begin." : "Assign from Inbox or capture a task."
                 )
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
@@ -802,6 +856,8 @@ struct TodayView: View {
                 .padding(.top, Theme.Spacing.xxxs)
             }
         }
+        .padding(Theme.Spacing.cardInset)
+        .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
     }
 
     private var immersiveFocusLayer: some View {
@@ -820,7 +876,7 @@ struct TodayView: View {
             VStack(spacing: Theme.Spacing.lg) {
                 Spacer(minLength: 86)
 
-                Text(activeFocusTask?.title ?? "Select a high-priority task")
+                Text(activeFocusTask?.title ?? "Choose one thing.")
                     .font(.system(size: 30, weight: .semibold, design: .rounded))
                     .foregroundStyle(Theme.text)
                     .multilineTextAlignment(.center)
@@ -902,7 +958,7 @@ struct TodayView: View {
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
             } else {
-                Text("Select a high-priority task")
+                Text("Choose one thing.")
                     .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
             }
@@ -1308,6 +1364,14 @@ struct TodayView: View {
         return "\(hours)h \(remainder)m"
     }
 
+    private func ritualWord(for count: Int) -> String {
+        count == 1 ? "ritual" : "rituals"
+    }
+
+    private func foundationWord(for count: Int) -> String {
+        count == 1 ? "foundation" : "foundations"
+    }
+
 }
 
 private struct FocusTaskRow: View {
@@ -1377,9 +1441,9 @@ private struct FocusTaskRow: View {
         .matchedGeometryEffect(id: task.id, in: namespace)
         .contentShape(Rectangle())
         .contextMenu {
-            Button("High") { onSetPriority(.high) }
-            Button("Medium") { onSetPriority(.medium) }
-            Button("Low") { onSetPriority(.low) }
+            Button(TaskPriority.high.displayLabel) { onSetPriority(.high) }
+            Button(TaskPriority.medium.displayLabel) { onSetPriority(.medium) }
+            Button(TaskPriority.low.displayLabel) { onSetPriority(.low) }
         }
     }
 

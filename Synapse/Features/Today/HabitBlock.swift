@@ -143,7 +143,7 @@ struct HabitBlock: View {
         do {
             try modelContext.save()
         } catch {
-            print("Habit save failed: \(error)")
+            print("Habit save error: \(error)")
         }
 
         onCompletionStateChange?(

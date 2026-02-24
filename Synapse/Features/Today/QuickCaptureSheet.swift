@@ -217,13 +217,13 @@ struct QuickCaptureSheet: View {
 
     private var prioritySection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Priority")
+            Text("Role")
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
-            Picker("Priority", selection: $priority) {
-                Text("High").tag(TaskPriority.high)
-                Text("Medium").tag(TaskPriority.medium)
-                Text("Low").tag(TaskPriority.low)
+            Picker("Task role", selection: $priority) {
+                Text(TaskPriority.high.displayLabel).tag(TaskPriority.high)
+                Text(TaskPriority.medium.displayLabel).tag(TaskPriority.medium)
+                Text(TaskPriority.low.displayLabel).tag(TaskPriority.low)
             }
             .pickerStyle(.segmented)
         }
