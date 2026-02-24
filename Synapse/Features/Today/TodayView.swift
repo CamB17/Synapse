@@ -173,7 +173,8 @@ struct TodayView: View {
     private var assignedTasksForSelectedDay: [TaskItem] {
         sortedByPriority(
             todayTasks.filter { task in
-                calendar.isDate(assignmentDay(for: task), inSameDayAs: selectedDayStart)
+                guard let day = assignedDay(for: task) else { return false }
+                return calendar.isDate(day, inSameDayAs: selectedDayStart)
             }
         )
     }
@@ -1310,7 +1311,7 @@ struct TodayView: View {
                 EmptyStatePanel(
                     symbol: "checklist",
                     title: isTodaySelectedDay ? "No tasks yet" : "No tasks assigned",
-                    subtitle: isTodaySelectedDay ? "Assign from Inbox or capture a task." : "Nothing scheduled for this day."
+                    subtitle: isTodaySelectedDay ? "Use + to schedule your next task." : "Nothing scheduled for this day."
                 )
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
@@ -1698,18 +1699,13 @@ struct TodayView: View {
         var didChange = false
 
         for task in todayTasks {
-            let day = assignmentDay(for: task)
+            guard let day = assignedDay(for: task) else { continue }
 
             if day < todayStart {
                 task.carriedOverFrom = day
                 task.assignedDate = todayStart
                 didChange = true
                 continue
-            }
-
-            if task.assignedDate == nil, calendar.isDate(day, inSameDayAs: todayStart) {
-                task.assignedDate = todayStart
-                didChange = true
             }
         }
 
@@ -1743,22 +1739,13 @@ struct TodayView: View {
     }
 
     private func isHabit(_ habit: Habit, activeOn day: Date) -> Bool {
-        let dayStart = calendar.startOfDay(for: day)
-        let createdDay = calendar.startOfDay(for: habit.createdAt)
-        guard dayStart >= createdDay else { return false }
-
-        let periods = habitPausePeriods.filter { $0.habitId == habit.id }
-        if !habit.isActive, periods.allSatisfy({ $0.endDay != nil }), dayStart >= todayStart {
-            return false
-        }
-        for period in periods {
-            let start = calendar.startOfDay(for: period.startDay)
-            let end = calendar.startOfDay(for: period.endDay ?? .distantFuture)
-            if dayStart >= start && dayStart < end {
-                return false
-            }
-        }
-        return true
+        RitualAnalytics.isHabit(
+            habit,
+            activeOn: day,
+            today: todayStart,
+            pausePeriods: habitPausePeriods,
+            calendar: calendar
+        )
     }
 
     private func backfillHabitCompletionsIfNeeded() {
@@ -1903,11 +1890,9 @@ struct TodayView: View {
         return calendar.startOfDay(for: date).formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
-    private func assignmentDay(for task: TaskItem) -> Date {
-        if let assignedDate = task.assignedDate {
-            return calendar.startOfDay(for: assignedDate)
-        }
-        return calendar.startOfDay(for: task.createdAt)
+    private func assignedDay(for task: TaskItem) -> Date? {
+        guard let assignedDate = task.assignedDate else { return nil }
+        return calendar.startOfDay(for: assignedDate)
     }
 
     private func timeString(_ seconds: Int) -> String {
