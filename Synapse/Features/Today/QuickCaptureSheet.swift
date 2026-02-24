@@ -46,33 +46,38 @@ struct QuickCaptureSheet: View {
     var body: some View {
         NavigationStack {
             ScreenCanvas {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    titleInput
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        titleInput
 
-                    if let error = voiceCapture.errorMessage {
-                        Text(error)
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.textSecondary)
-                            .padding(.horizontal, Theme.Spacing.xs)
+                        if let error = voiceCapture.errorMessage {
+                            Text(error)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.textSecondary)
+                                .padding(.horizontal, Theme.Spacing.xs)
+                        }
+
+                        partOfDaySection
+
+                        dateSection
+
+                        repeatSection
+
+                        prioritySection
+
+                        addButton
                     }
-
-                    partOfDaySection
-
-                    dateSection
-
-                    repeatSection
-
-                    prioritySection
-
-                    addButton
+                    .padding(Theme.Spacing.md)
+                    .padding(.top, Theme.Spacing.lg)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            titleFieldFocused = false
+                        }
+                    )
                 }
-                .padding(Theme.Spacing.md)
-                .contentShape(Rectangle())
-                .simultaneousGesture(
-                    TapGesture().onEnded {
-                        titleFieldFocused = false
-                    }
-                )
+                .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("Add Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -103,6 +108,7 @@ struct QuickCaptureSheet: View {
                 voiceCapture.stop()
             }
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 
     private var titleInput: some View {
@@ -134,7 +140,6 @@ struct QuickCaptureSheet: View {
         .padding(.vertical, Theme.Spacing.xs)
         .frame(minHeight: 52)
         .surfaceCard(cornerRadius: Theme.radiusSmall)
-        .padding(.top, Theme.Spacing.xs)
     }
 
     private var addButton: some View {

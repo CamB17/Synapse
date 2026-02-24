@@ -87,6 +87,8 @@ struct RootView: View {
                 defaultAssignmentDay: todayStart,
                 onAdded: { _, _ in }
             )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingRitualCapture) {
             RitualEditorSheet(

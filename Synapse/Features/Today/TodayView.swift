@@ -459,6 +459,8 @@ struct TodayView: View {
                         handleCapturedTask(task, addedToToday: addedToToday)
                     }
                 )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
             .sheet(item: $selectedDayDetail) { selection in
                 DayDetailView(day: selection.day)

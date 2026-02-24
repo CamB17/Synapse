@@ -33,17 +33,21 @@ struct TaskEditorSheet: View {
     var body: some View {
         NavigationStack {
             ScreenCanvas {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    titleCard
-                    dateCard
-                    timeCard
-                    priorityCard
-                    repeatCard
-                    statusCard
-                    Spacer(minLength: 0)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        titleCard
+                        dateCard
+                        timeCard
+                        priorityCard
+                        repeatCard
+                        statusCard
+                        Spacer(minLength: 0)
+                    }
+                    .padding(Theme.Spacing.md)
+                    .padding(.top, Theme.Spacing.lg)
                 }
-                .padding(Theme.Spacing.md)
-                .padding(.top, Theme.Spacing.lg)
+                .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -65,6 +69,7 @@ struct TaskEditorSheet: View {
                 }
             }
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 
     private var titleCard: some View {

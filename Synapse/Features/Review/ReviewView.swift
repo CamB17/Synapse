@@ -623,7 +623,7 @@ struct ReviewView: View {
             }
             .sheet(item: $editingTask) { task in
                 TaskEditorSheet(task: task)
-                    .presentationDetents([.fraction(0.72), .large])
+                    .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
         }
