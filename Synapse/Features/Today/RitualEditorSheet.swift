@@ -63,6 +63,7 @@ struct RitualEditorSheet: View {
                 }
             }
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 
     private var titleCard: some View {

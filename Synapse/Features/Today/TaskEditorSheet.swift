@@ -16,6 +16,7 @@ struct TaskEditorSheet: View {
     @State private var markCompleted: Bool
 
     private var calendar: Calendar { .current }
+    private let repeatOptions: [TaskRepeatRule] = [.none, .daily, .weekly, .monthly, .yearly, .custom]
 
     init(task: TaskItem) {
         self.task = task
@@ -33,17 +34,21 @@ struct TaskEditorSheet: View {
     var body: some View {
         NavigationStack {
             ScreenCanvas {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    titleCard
-                    dateCard
-                    timeCard
-                    priorityCard
-                    repeatCard
-                    statusCard
-                    Spacer(minLength: 0)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        titleCard
+                        dateCard
+                        timeCard
+                        priorityCard
+                        repeatCard
+                        statusCard
+                        Spacer(minLength: 0)
+                    }
+                    .padding(Theme.Spacing.md)
+                    .padding(.top, Theme.Spacing.lg)
                 }
-                .padding(Theme.Spacing.md)
-                .padding(.top, Theme.Spacing.lg)
+                .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -65,6 +70,7 @@ struct TaskEditorSheet: View {
                 }
             }
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 
     private var titleCard: some View {
@@ -139,15 +145,34 @@ struct TaskEditorSheet: View {
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
 
-            Picker("Repeat", selection: $repeatRule) {
-                Text("No repeat").tag(TaskRepeatRule.none)
-                Text("Daily").tag(TaskRepeatRule.daily)
-                Text("Weekly").tag(TaskRepeatRule.weekly)
-                Text("Monthly").tag(TaskRepeatRule.monthly)
-                Text("Yearly").tag(TaskRepeatRule.yearly)
-                Text("Custom").tag(TaskRepeatRule.custom)
+            Menu {
+                ForEach(repeatOptions, id: \.self) { option in
+                    Button {
+                        repeatRule = option
+                    } label: {
+                        if option == repeatRule {
+                            Label(repeatLabel(option), systemImage: "checkmark")
+                        } else {
+                            Text(repeatLabel(option))
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Text(repeatLabel(repeatRule))
+                        .font(Theme.Typography.bodyMedium)
+                        .foregroundStyle(Theme.text)
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .padding(.horizontal, Theme.Spacing.sm)
+                .padding(.vertical, Theme.Spacing.xs)
+                .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
             }
-            .pickerStyle(.menu)
 
             if repeatRule == .custom {
                 TextField("Custom repeat rule", text: $customRepeatText)
@@ -160,6 +185,17 @@ struct TaskEditorSheet: View {
         }
         .padding(Theme.Spacing.cardInset)
         .surfaceCard(cornerRadius: Theme.radiusSmall)
+    }
+
+    private func repeatLabel(_ option: TaskRepeatRule) -> String {
+        switch option {
+        case .none: return "No repeat"
+        case .daily: return "Daily"
+        case .weekly: return "Weekly"
+        case .monthly: return "Monthly"
+        case .yearly: return "Yearly"
+        case .custom: return "Custom"
+        }
     }
 
     private var statusCard: some View {
