@@ -251,7 +251,7 @@ struct ManageHabitsView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Habit save failed: \(error)")
+            print("Habit save error: \(error)")
         }
     }
 
@@ -291,7 +291,7 @@ struct ManageHabitsView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Habit edit failed: \(error)")
+            print("Habit edit error: \(error)")
         }
     }
 
@@ -303,7 +303,7 @@ struct ManageHabitsView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Habit delete failed: \(error)")
+            print("Habit delete error: \(error)")
         }
     }
 
@@ -317,7 +317,7 @@ struct ManageHabitsView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Habit pause failed: \(error)")
+            print("Habit pause error: \(error)")
         }
     }
 
@@ -331,7 +331,7 @@ struct ManageHabitsView: View {
         do {
             try modelContext.save()
         } catch {
-            print("Habit resume failed: \(error)")
+            print("Habit resume error: \(error)")
         }
     }
 }
