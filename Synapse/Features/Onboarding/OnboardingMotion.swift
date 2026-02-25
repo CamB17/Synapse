@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct OnboardingMotion {
+struct Motion {
     static let duration: Double = 0.25
     static let easing = Animation.easeInOut(duration: duration)
 

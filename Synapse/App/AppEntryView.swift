@@ -37,6 +37,6 @@ struct AppEntryView: View {
                     .transition(.opacity)
             }
         }
-        .animation(OnboardingMotion.easing, value: route.rawValue)
+        .animation(Motion.easing, value: route.rawValue)
     }
 }

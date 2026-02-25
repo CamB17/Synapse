@@ -34,7 +34,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                         calendarSection
                         notificationsSection
-                        identitySection
+                        habitSection
                         taskSection
                         accountSection
                     }
@@ -68,7 +68,7 @@ struct SettingsView: View {
                 }
             }
             .sheet(isPresented: $showingManageHabits) {
-                ManageHabitsView(title: "Identity")
+                ManageHabitsView(title: "Habits")
             }
             .sheet(isPresented: $showingAllTasks) {
                 AllTasksView()
@@ -161,8 +161,8 @@ struct SettingsView: View {
         }
     }
 
-    private var identitySection: some View {
-        settingsCard(title: "Identity") {
+    private var habitSection: some View {
+        settingsCard(title: "Habits") {
             settingsActionRow(title: "Manage time blocks") {
                 ensureRecordsExist()
                 showingTimeBlockEditor = true

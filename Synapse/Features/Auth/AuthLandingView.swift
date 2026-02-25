@@ -85,7 +85,7 @@ struct AuthLandingView: View {
     }
 
     private func completeAuth() {
-        withAnimation(OnboardingMotion.easing) {
+        withAnimation(Motion.easing) {
             session.signIn()
         }
     }
@@ -96,6 +96,6 @@ private struct AuthPressStyle: ButtonStyle {
         configuration.label
             .opacity(configuration.isPressed ? 0.95 : 1)
             .scaleEffect(configuration.isPressed ? 0.99 : 1)
-            .animation(OnboardingMotion.easing, value: configuration.isPressed)
+            .animation(Motion.easing, value: configuration.isPressed)
     }
 }

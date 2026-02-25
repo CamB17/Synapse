@@ -46,7 +46,7 @@ struct RootView: View {
             .opacity(selectedTab == .today ? 1 : 0)
             .allowsHitTesting(selectedTab == .today)
 
-            ManageHabitsView(title: "Identity", showsDoneButton: false)
+            ManageHabitsView(title: "Habits", showsDoneButton: false)
                 .opacity(selectedTab == .habits ? 1 : 0)
                 .allowsHitTesting(selectedTab == .habits)
 
@@ -54,8 +54,8 @@ struct RootView: View {
                 .opacity(selectedTab == .review ? 1 : 0)
                 .allowsHitTesting(selectedTab == .review)
         }
-        .animation(.snappy(duration: 0.18), value: selectedTab)
-        .animation(.snappy(duration: 0.2), value: hideTabBar)
+        .animation(Motion.easing, value: selectedTab)
+        .animation(Motion.easing, value: hideTabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !hideTabBar {
                 customTabBar
@@ -65,19 +65,19 @@ struct RootView: View {
         .sheet(isPresented: $showingUniversalCapture) {
             UniversalCaptureSheet(
                 onAddTask: {
-                    withAnimation(.snappy(duration: 0.18)) {
+                    withAnimation(Motion.easing) {
                         selectedTab = .today
                     }
                     showingTaskCapture = true
                 },
                 onAddAppointment: {
-                    withAnimation(.snappy(duration: 0.18)) {
+                    withAnimation(Motion.easing) {
                         selectedTab = .today
                     }
                     showingAppointmentCapture = true
                 },
                 onAddHabit: {
-                    withAnimation(.snappy(duration: 0.18)) {
+                    withAnimation(Motion.easing) {
                         selectedTab = .habits
                     }
                     showingHabitCapture = true
@@ -119,7 +119,7 @@ struct RootView: View {
 
                 addCaptureButton
 
-                tabButton(tab: .habits, title: "Identity", icon: "leaf")
+                tabButton(tab: .habits, title: "Habits", icon: "leaf")
                 tabButton(tab: .review, title: "Review", icon: "chart.bar")
             }
             .padding(.horizontal, Theme.Spacing.lg)
@@ -135,7 +135,7 @@ struct RootView: View {
         let isSelected = selectedTab == tab
 
         return Button {
-            withAnimation(.snappy(duration: 0.18)) {
+            withAnimation(Motion.easing) {
                 selectedTab = tab
             }
         } label: {

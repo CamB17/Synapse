@@ -13,6 +13,7 @@ struct HabitEditorSheet: View {
     @State private var frequency: HabitFrequency
     @State private var timeOfDay: TaskPartOfDay
     @State private var selectedWeekdays: Set<Int>
+    @State private var startDate: Date
 
     private var calendar: Calendar { .current }
 
@@ -25,11 +26,13 @@ struct HabitEditorSheet: View {
         let initialTimeOfDay = habit?.timeOfDay ?? .anytime
         let defaultWeekday = Calendar.current.component(.weekday, from: .now)
         let initialDays = habit?.scheduledWeekdays ?? [defaultWeekday]
+        let initialStartDate = Calendar.current.startOfDay(for: habit?.createdAt ?? .now)
 
         _title = State(initialValue: habit?.title ?? "")
         _frequency = State(initialValue: initialFrequency)
         _timeOfDay = State(initialValue: initialTimeOfDay)
         _selectedWeekdays = State(initialValue: initialDays.isEmpty ? [defaultWeekday] : initialDays)
+        _startDate = State(initialValue: initialStartDate)
     }
 
     var body: some View {
@@ -39,6 +42,7 @@ struct HabitEditorSheet: View {
                     titleCard
                     frequencyCard
                     timeCard
+                    startDateCard
                     Spacer(minLength: 0)
                 }
                 .padding(Theme.Spacing.md)
@@ -136,6 +140,25 @@ struct HabitEditorSheet: View {
         .surfaceCard(cornerRadius: Theme.radiusSmall)
     }
 
+    private var startDateCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("Start date")
+                .font(Theme.Typography.bodySmall)
+                .foregroundStyle(Theme.textSecondary)
+
+            DatePicker(
+                "Start date",
+                selection: $startDate,
+                displayedComponents: [.date]
+            )
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .tint(Theme.accent)
+        }
+        .padding(Theme.Spacing.cardInset)
+        .surfaceCard(cornerRadius: Theme.radiusSmall)
+    }
+
     private func weekdayChip(_ day: Int) -> some View {
         let isSelected = selectedWeekdays.contains(day)
 
@@ -218,6 +241,7 @@ struct HabitEditorSheet: View {
             habit.frequency = frequency
             habit.timeOfDay = timeOfDay
             habit.scheduledWeekdays = normalizedWeekdays
+            habit.createdAt = calendar.startOfDay(for: startDate)
         } else {
             let newHabit = Habit(
                 title: trimmed,
@@ -226,6 +250,7 @@ struct HabitEditorSheet: View {
                 scheduledWeekdays: normalizedWeekdays,
                 sortOrder: defaultSortOrder
             )
+            newHabit.createdAt = calendar.startOfDay(for: startDate)
             modelContext.insert(newHabit)
             onSaved?(newHabit)
         }

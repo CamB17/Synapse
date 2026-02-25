@@ -29,7 +29,7 @@ struct ReviewView: View {
     @State private var showingManageHabits = false
     @State private var showingAllTasks = false
     @State private var showingSettings = false
-    @State private var showingIdentityDetails = false
+    @State private var showingHabitDetails = false
     @State private var showingProductivityDetails = false
     @State private var editingTask: TaskItem?
     @State private var habitSort: HabitSort = .completion
@@ -645,7 +645,7 @@ struct ReviewView: View {
                 }
             }
             .sheet(isPresented: $showingManageHabits) {
-                ManageHabitsView(title: "Identity")
+                ManageHabitsView(title: "Habits")
             }
             .sheet(isPresented: $showingAllTasks) {
                 AllTasksView()
@@ -673,7 +673,7 @@ struct ReviewView: View {
     private var dailyReview: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             dailyDateSelector
-            dailyIdentityCard
+            dailyHabitCard
             dailyProductivityCard
             dailyInsightsCard
         }
@@ -726,10 +726,10 @@ struct ReviewView: View {
         .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
     }
 
-    private var dailyIdentityCard: some View {
+    private var dailyHabitCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack {
-                Text("Identity (Habits)")
+                Text("Habits")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.textSecondary)
 
@@ -750,7 +750,7 @@ struct ReviewView: View {
                     .font(Theme.Typography.bodySmallStrong)
                     .foregroundStyle(Theme.text)
 
-                Text("Add one habit to begin your identity review.")
+                Text("Add one habit to begin your habit review.")
                     .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
 
@@ -766,9 +766,9 @@ struct ReviewView: View {
                     habitProgressBar(ratio: dailyHabitSummary.ratio)
                 }
 
-                Button(showingIdentityDetails ? "Hide details" : "View details") {
+                Button(showingHabitDetails ? "Hide details" : "View details") {
                     withAnimation(.snappy(duration: 0.18)) {
-                        showingIdentityDetails.toggle()
+                        showingHabitDetails.toggle()
                     }
                 }
                 .buttonStyle(.plain)
@@ -776,7 +776,7 @@ struct ReviewView: View {
                 .foregroundStyle(Theme.accent)
                 .padding(.top, Theme.Spacing.xxs)
 
-                if showingIdentityDetails {
+                if showingHabitDetails {
                     VStack(spacing: Theme.Spacing.xxs) {
                         ForEach(dailyActiveHabits) { habit in
                             let completed = dailyCompletedHabitIDs.contains(habit.id)

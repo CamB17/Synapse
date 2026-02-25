@@ -48,7 +48,7 @@ struct OnboardingShellView<Content: View>: View {
                     .opacity(hasAppeared ? 1 : 0)
                     .offset(y: hasAppeared ? 0 : 10)
                     .animation(
-                        OnboardingMotion.easing.delay(OnboardingMotion.stagger(0)),
+                        Motion.easing.delay(Motion.stagger(0)),
                         value: hasAppeared
                     )
 
@@ -56,7 +56,7 @@ struct OnboardingShellView<Content: View>: View {
                     .opacity(hasAppeared ? 1 : 0)
                     .offset(y: hasAppeared ? 0 : 12)
                     .animation(
-                        OnboardingMotion.easing.delay(OnboardingMotion.stagger(1)),
+                        Motion.easing.delay(Motion.stagger(1)),
                         value: hasAppeared
                     )
 
@@ -65,7 +65,7 @@ struct OnboardingShellView<Content: View>: View {
                     .opacity(hasAppeared ? 1 : 0)
                     .offset(y: hasAppeared ? 0 : 14)
                     .animation(
-                        OnboardingMotion.easing.delay(OnboardingMotion.stagger(2)),
+                        Motion.easing.delay(Motion.stagger(2)),
                         value: hasAppeared
                     )
 
@@ -73,7 +73,7 @@ struct OnboardingShellView<Content: View>: View {
 
                 if let primaryTitle {
                     Button {
-                        withAnimation(OnboardingMotion.easing) {
+                        withAnimation(Motion.easing) {
                             onPrimary()
                         }
                     } label: {
@@ -92,7 +92,7 @@ struct OnboardingShellView<Content: View>: View {
                     .opacity(hasAppeared ? 1 : 0)
                     .offset(y: hasAppeared ? 0 : 16)
                     .animation(
-                        OnboardingMotion.easing.delay(OnboardingMotion.stagger(3)),
+                        Motion.easing.delay(Motion.stagger(3)),
                         value: hasAppeared
                     )
                 }
@@ -102,7 +102,7 @@ struct OnboardingShellView<Content: View>: View {
         }
         .onAppear {
             hasAppeared = false
-            withAnimation(OnboardingMotion.easing) {
+            withAnimation(Motion.easing) {
                 hasAppeared = true
             }
         }

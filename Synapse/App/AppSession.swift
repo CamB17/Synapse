@@ -15,17 +15,33 @@ final class AppSession: ObservableObject {
         }
     }
 
+    @Published var shouldShowFirstTodayExperience: Bool {
+        didSet {
+            defaults.set(shouldShowFirstTodayExperience, forKey: Keys.shouldShowFirstTodayExperience)
+        }
+    }
+
+    @Published var hasSeenTodayTooltip: Bool {
+        didSet {
+            defaults.set(hasSeenTodayTooltip, forKey: Keys.hasSeenTodayTooltip)
+        }
+    }
+
     private let defaults: UserDefaults
 
     private enum Keys {
         static let isAuthenticated = "session.isAuthenticated"
         static let hasCompletedOnboarding = "user.hasCompletedOnboarding"
+        static let shouldShowFirstTodayExperience = "user.shouldShowFirstTodayExperience"
+        static let hasSeenTodayTooltip = "user.hasSeenTodayTooltip"
     }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.isAuthenticated = defaults.bool(forKey: Keys.isAuthenticated)
         self.hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
+        self.shouldShowFirstTodayExperience = defaults.bool(forKey: Keys.shouldShowFirstTodayExperience)
+        self.hasSeenTodayTooltip = defaults.bool(forKey: Keys.hasSeenTodayTooltip)
     }
 
     func signIn() {
@@ -34,10 +50,19 @@ final class AppSession: ObservableObject {
 
     func completeOnboarding() {
         hasCompletedOnboarding = true
+        shouldShowFirstTodayExperience = true
     }
 
     func restartOnboarding() {
         hasCompletedOnboarding = false
+    }
+
+    func consumeFirstTodayExperience() {
+        shouldShowFirstTodayExperience = false
+    }
+
+    func markTodayTooltipSeen() {
+        hasSeenTodayTooltip = true
     }
 
     func signOut() {

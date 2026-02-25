@@ -7,8 +7,8 @@ enum OnboardingStep: Equatable {
     case notifications
     case calendarIntro
     case calendarSelect
-    case routineTimeBlocks
-    case routinePicker(HabitTimeBlock)
+    case timeBlocks
+    case habitPicker(HabitTimeBlock)
     case finish
 }
 
@@ -70,10 +70,10 @@ struct OnboardingCoordinator: View {
             .notifications,
             .calendarIntro,
             .calendarSelect,
-            .routineTimeBlocks
+            .timeBlocks
         ]
 
-        output.append(contentsOf: orderedTimeBlocks.map { .routinePicker($0) })
+        output.append(contentsOf: orderedTimeBlocks.map { .habitPicker($0) })
         output.append(.finish)
         return output
     }
@@ -90,9 +90,9 @@ struct OnboardingCoordinator: View {
             return progress(slot: 3, totalSlots: totalSlots)
         case .calendarSelect:
             return progress(slot: 4, totalSlots: totalSlots)
-        case .routineTimeBlocks:
+        case .timeBlocks:
             return progress(slot: 5, totalSlots: totalSlots)
-        case let .routinePicker(block):
+        case let .habitPicker(block):
             let pickerIndex = orderedTimeBlocks.firstIndex(of: block) ?? 0
             return progress(slot: 6 + pickerIndex, totalSlots: totalSlots)
         case .finish:
@@ -102,7 +102,7 @@ struct OnboardingCoordinator: View {
 
     private var groupedCalendarOptions: [(title: String, options: [CalendarOption])] {
         let grouped = Dictionary(grouping: calendarOptions, by: \.section)
-        let order = ["iCloud", "Google", "Other", "Birthdays", "Subscribed calendars"]
+        let order = ["iCloud", "Google", "Other", "Subscribed calendars"]
         return grouped
             .map { key, value in
                 (title: key, options: value.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending })
@@ -153,7 +153,7 @@ struct OnboardingCoordinator: View {
                 .id(stepID)
                 .transition(isForward ? .onboardingForward : .onboardingBackward)
         }
-        .animation(OnboardingMotion.easing, value: stepID)
+        .animation(Motion.easing, value: stepID)
     }
 
     @ViewBuilder
@@ -162,15 +162,15 @@ struct OnboardingCoordinator: View {
         case .goals:
             OnboardingShellView(
                 progress: progressValue,
-                title: "What do you want help with right now?",
-                subtitle: "Pick the outcomes you want Synapse to optimize first.",
+                title: "What matters most right now?",
+                subtitle: "We’ll shape your Today and Review around this.",
                 showsBack: false,
                 onBack: {},
                 onSkip: {
-                    navigateToNextStep()
+                    skip()
                 },
                 onPrimary: {
-                    navigateToNextStep()
+                    goNext()
                 }
             ) {
                 goalCards
@@ -180,16 +180,15 @@ struct OnboardingCoordinator: View {
             OnboardingShellView(
                 progress: progressValue,
                 title: "Stay gently on track",
-                subtitle: "Enable reminders only if you want them. You can change this later.",
+                subtitle: "Enable reminders only if you want them. You can change this anytime.",
                 onBack: {
-                    navigateToPreviousStep()
+                    goBack()
                 },
                 onSkip: {
-                    applyNotificationsChoice(.disabled)
-                    navigateToNextStep()
+                    skip()
                 },
                 onPrimary: {
-                    navigateToNextStep()
+                    goNext()
                 }
             ) {
                 notificationsCards
@@ -198,21 +197,17 @@ struct OnboardingCoordinator: View {
         case .calendarIntro:
             OnboardingShellView(
                 progress: progressValue,
-                title: "Import your calendar for a quick start",
-                subtitle: "Bring in Apple or Google events as read-only appointments.",
+                title: "Bring your calendar into view",
+                subtitle: "See your appointments alongside tasks and rituals.",
+                primaryTitle: nil,
+                showsSkip: false,
                 onBack: {
-                    navigateToPreviousStep()
+                    goBack()
                 },
                 onSkip: {
-                    skipCalendarSetup()
+                    skip()
                 },
-                onPrimary: {
-                    if selectedProviders.isEmpty {
-                        skipCalendarSetup()
-                    } else {
-                        jump(to: .calendarSelect, forward: true)
-                    }
-                }
+                onPrimary: {}
             ) {
                 calendarIntroContent
             }
@@ -223,13 +218,13 @@ struct OnboardingCoordinator: View {
                 title: "Choose calendars",
                 subtitle: "Select what should appear in Today. Sync remains read-only.",
                 onBack: {
-                    navigateToPreviousStep()
+                    goBack()
                 },
                 onSkip: {
-                    navigateToNextStep()
+                    skip()
                 },
                 onPrimary: {
-                    navigateToNextStep()
+                    goNext()
                 }
             ) {
                 calendarSelectionContent
@@ -240,53 +235,52 @@ struct OnboardingCoordinator: View {
                 }
             }
 
-        case .routineTimeBlocks:
+        case .timeBlocks:
             OnboardingShellView(
                 progress: progressValue,
-                title: "When do your habits matter most?",
-                subtitle: "Choose the time blocks where you want identity support.",
+                title: "When do your habits show up?",
+                subtitle: "Choose the parts of your day you want to support.",
                 onBack: {
-                    navigateToPreviousStep()
+                    goBack()
                 },
                 onSkip: {
-                    selectedTimeBlocks = []
-                    navigateToNextStep()
+                    skip()
                 },
                 onPrimary: {
-                    navigateToNextStep()
+                    goNext()
                 }
             ) {
                 timeBlockContent
             }
 
-        case let .routinePicker(block):
+        case let .habitPicker(block):
             OnboardingShellView(
                 progress: progressValue,
-                title: "Pick your \(block.title.lowercased()) habits",
-                subtitle: "Choose presets now. You can reorder or edit them later.",
+                title: "Pick your \(block.title.lowercased()) rituals",
+                subtitle: "Choose a few to begin. You can edit them anytime.",
                 onBack: {
-                    navigateToPreviousStep()
+                    goBack()
                 },
                 onSkip: {
-                    navigateToNextStep()
+                    skip()
                 },
                 onPrimary: {
-                    navigateToNextStep()
+                    goNext()
                 }
             ) {
-                routinePickerContent(for: block)
+                habitPickerContent(for: block)
             }
 
         case .finish:
             OnboardingShellView(
                 progress: progressValue,
-                title: "Ready to start",
-                subtitle: "Your identity setup is in place. You can adjust everything in Settings.",
-                primaryTitle: isPersisting ? "Preparing..." : "Start My Day",
+                title: "You’re set.",
+                subtitle: "Your habits setup is in place.",
+                primaryTitle: "Start My Day",
                 isPrimaryDisabled: isPersisting,
                 showsSkip: false,
                 onBack: {
-                    navigateToPreviousStep()
+                    goBack()
                 },
                 onSkip: {},
                 onPrimary: {
@@ -328,7 +322,7 @@ struct OnboardingCoordinator: View {
         VStack(spacing: Theme.Spacing.xs) {
             notificationChoiceCard(
                 title: "Yes, send reminders",
-                subtitle: "We will ask for system permission now.",
+                subtitle: "We’ll ask iOS for permission next.",
                 isSelected: notificationsEnabled,
                 action: {
                     requestNotificationPermissionAndApply()
@@ -457,7 +451,7 @@ struct OnboardingCoordinator: View {
         }
     }
 
-    private func routinePickerContent(for block: HabitTimeBlock) -> some View {
+    private func habitPickerContent(for block: HabitTimeBlock) -> some View {
         let options = habitPresetOptions(for: block)
         let selected = selectedHabitTemplates[block, default: []]
         let customSelections = selected
@@ -513,7 +507,7 @@ struct OnboardingCoordinator: View {
             if customInputVisible {
                 HStack(spacing: Theme.Spacing.xs) {
                     TextField(
-                        "Type a custom habit",
+                        "e.g. Journal for 5 minutes",
                         text: Binding(
                             get: { customHabitDraftByBlock[block, default: ""] },
                             set: { customHabitDraftByBlock[block] = $0 }
@@ -578,38 +572,46 @@ struct OnboardingCoordinator: View {
                 }
             }
 
-            Text("Selected \(selected.count) presets")
+            Text("Selected: \(selected.count)")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.textSecondary)
         }
     }
 
     private var finishContent: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            summaryRow(label: "Goals", value: selectedGoals.isEmpty ? "None" : "\(selectedGoals.count)")
-            summaryRow(label: "Reminders", value: notificationsEnabled ? "Enabled" : "Off")
-            summaryRow(label: "Calendar", value: calendarState == .connected ? "Connected" : "Skipped")
-            summaryRow(label: "Time blocks", value: selectedTimeBlocks.isEmpty ? "None" : "\(selectedTimeBlocks.count)")
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                Text("Your setup")
+                    .font(Theme.Typography.bodySmallStrong)
+                    .foregroundStyle(Theme.text)
 
-            Text("You can adjust calendar sync, reminders, habits, and task views anytime in Settings.")
-                .font(Theme.Typography.caption)
+                summaryBullet("Goals selected: \(selectedGoals.count)")
+                summaryBullet("Reminders: \(notificationsEnabled ? "Enabled" : "Off")")
+                summaryBullet("Calendar: \(calendarState == .connected ? "Connected" : "Skipped")")
+                summaryBullet("Morning rituals: \(morningRitualsSummary)")
+            }
+            .padding(Theme.Spacing.cardInset)
+            .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
+
+            Text("You can adjust everything anytime in Settings.")
+                .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(Theme.Spacing.cardInset)
-        .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
     }
 
-    private func summaryRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(Theme.Typography.bodySmall)
-                .foregroundStyle(Theme.textSecondary)
-            Spacer(minLength: 0)
-            Text(value)
-                .font(Theme.Typography.bodySmallStrong)
-                .foregroundStyle(Theme.text)
-        }
+    private var morningRitualsSummary: String {
+        let hasMorningSelection =
+            selectedTimeBlocks.contains(.morning)
+            || !selectedHabitTemplates[.morning, default: []].isEmpty
+        return hasMorningSelection ? "Active" : "Off"
+    }
+
+    private func summaryBullet(_ text: String) -> some View {
+        Text("• \(text)")
+            .font(Theme.Typography.bodySmall)
+            .foregroundStyle(Theme.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func notificationChoiceCard(
@@ -701,10 +703,6 @@ struct OnboardingCoordinator: View {
             return "Google"
         }
 
-        if normalized.contains("birthday") {
-            return "Birthdays"
-        }
-
         if normalized.contains("subscribed") {
             return "Subscribed calendars"
         }
@@ -747,7 +745,7 @@ struct OnboardingCoordinator: View {
         }
     }
 
-    private func navigateToNextStep() {
+    private func goNext() {
         let steps = flowSteps
         guard let index = steps.firstIndex(of: step) else { return }
         guard index + 1 < steps.count else {
@@ -757,7 +755,7 @@ struct OnboardingCoordinator: View {
         jump(to: steps[index + 1], forward: true)
     }
 
-    private func navigateToPreviousStep() {
+    private func goBack() {
         let steps = flowSteps
         guard let index = steps.firstIndex(of: step), index > 0 else { return }
         jump(to: steps[index - 1], forward: false)
@@ -765,7 +763,7 @@ struct OnboardingCoordinator: View {
 
     private func jump(to destination: OnboardingStep, forward: Bool) {
         isForward = forward
-        withAnimation(OnboardingMotion.easing) {
+        withAnimation(Motion.easing) {
             step = destination
         }
     }
@@ -774,7 +772,22 @@ struct OnboardingCoordinator: View {
         calendarState = .skipped
         selectedProviders = []
         selectedCalendarIDs = []
-        jump(to: .routineTimeBlocks, forward: true)
+        jump(to: .timeBlocks, forward: true)
+    }
+
+    private func skip() {
+        switch step {
+        case .notifications:
+            applyNotificationsChoice(.disabled)
+            goNext()
+        case .calendarIntro:
+            skipCalendarSetup()
+        case .timeBlocks:
+            selectedTimeBlocks = []
+            goNext()
+        default:
+            goNext()
+        }
     }
 
     private func applyNotificationsChoice(_ choice: NotificationChoice) {
@@ -986,10 +999,10 @@ struct OnboardingCoordinator: View {
             return "calendarIntro"
         case .calendarSelect:
             return "calendarSelect"
-        case .routineTimeBlocks:
-            return "routineTimeBlocks"
-        case let .routinePicker(block):
-            return "routinePicker-\(block.rawValue)"
+        case .timeBlocks:
+            return "timeBlocks"
+        case let .habitPicker(block):
+            return "habitPicker-\(block.rawValue)"
         case .finish:
             return "finish"
         }

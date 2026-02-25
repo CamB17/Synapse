@@ -8,6 +8,7 @@ struct TodayView: View {
     @Binding var externalCaptureRequestID: Int
     @Binding var hideBottomNavigation: Bool
 
+    @EnvironmentObject private var session: AppSession
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
 
@@ -41,6 +42,9 @@ struct TodayView: View {
     @Query(sort: [SortDescriptor(\CalendarSyncSettings.createdAt, order: .forward)])
     private var syncSettingsRecords: [CalendarSyncSettings]
 
+    @Query(sort: [SortDescriptor(\UserPreferences.createdAt, order: .forward)])
+    private var preferenceRecords: [UserPreferences]
+
     @State private var showingCapture = false
     @State private var appointmentEditorContext: AppointmentEditorContext?
     @State private var showingCalendarSyncSheet = false
@@ -68,11 +72,20 @@ struct TodayView: View {
     @State private var focusToastWorkItem: DispatchWorkItem?
     @State private var daySyncAnchor = Calendar.current.startOfDay(for: .now)
     @State private var animatedCompletionRatio: CGFloat = 0
-    @State private var headerProgressPulse = false
     @State private var headerCompletionGlow = false
     @State private var hasInitializedHeaderProgress = false
     @State private var didBackfillHabitCompletions = false
     @State private var lastAppointmentAutoSyncAt: Date?
+
+    @State private var isFirstTodayExperience = false
+    @State private var hasConfiguredFirstTodayExperience = false
+    @State private var showHeaderEntrance = true
+    @State private var showWeekStripEntrance = true
+    @State private var showRitualSectionEntrance = true
+    @State private var showTasksSectionEntrance = true
+    @State private var showTodayTooltip = false
+
+    @State private var tooltipHideWorkItem: DispatchWorkItem?
     @StateObject private var appointmentSyncService = AppointmentSyncService()
     private let partOfDayTicker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
@@ -227,8 +240,33 @@ struct TodayView: View {
         return max(0, lowAndMediumTasks.count - shownLowAndMedium)
     }
 
+    private var preferences: UserPreferences? {
+        preferenceRecords.first
+    }
+
+    private var onboardingGoals: Set<OnboardingGoal> {
+        preferences?.goals ?? []
+    }
+
+    private var shouldHighlightFocusCallout: Bool {
+        isFirstTodayExperience
+            && isTodaySelectedDay
+            && onboardingGoals.contains(.prioritize)
+    }
+
+    private var shouldEmphasizeRitualSection: Bool {
+        isFirstTodayExperience
+            && isTodaySelectedDay
+            && onboardingGoals.contains(.buildHabits)
+    }
+
     private var activeSyncSettings: CalendarSyncSettings? {
         syncSettingsRecords.first
+    }
+
+    private var isCalendarConnected: Bool {
+        guard let settings = activeSyncSettings else { return false }
+        return settings.appleSyncEnabled || settings.googleSyncEnabled
     }
 
     private var appointmentsForSelectedDay: [Appointment] {
@@ -237,20 +275,21 @@ struct TodayView: View {
             .sorted(by: appointmentsSortOrder)
     }
 
+    private var shouldShowAppointmentsSection: Bool {
+        if isFirstTodayExperience && isTodaySelectedDay {
+            guard isCalendarConnected else { return false }
+            return !appointmentsForSelectedDay.isEmpty
+        }
+        return true
+    }
+
     private var appointmentStatusLine: String? {
         if appointmentSyncService.isSyncing {
-            return "Syncing calendar events..."
+            return "Syncing..."
         }
 
         if let error = appointmentSyncService.lastErrorMessage, !error.isEmpty {
-            return error
-        }
-
-        if let summary = appointmentSyncService.lastSummary {
-            if summary.totalImported == 0 && summary.removed == 0 {
-                return "Calendar sync is up to date."
-            }
-            return "Imported \(summary.totalImported) appointments."
+            return "Sync needs attention."
         }
 
         guard let settings = activeSyncSettings else { return nil }
@@ -258,7 +297,7 @@ struct TodayView: View {
             .compactMap { $0 }
             .max()
         guard let lastSync else { return nil }
-        return "Last sync \(lastSync.formatted(.dateTime.month(.abbreviated).day().hour().minute()))."
+        return "Synced at \(lastSync.formatted(.dateTime.hour().minute()))"
     }
 
     private var carriedForwardTasks: [TaskItem] {
@@ -302,14 +341,39 @@ struct TodayView: View {
         formatHeaderTitle(selectedDayStart)
     }
 
-    private var habitProgressLine: String {
-        guard selectedDayHabitSummary.total > 0 else {
-            return isTodaySelectedDay ? "No habits set yet" : "No habits for this day."
+    private var headerPrimaryLine: String {
+        let total = selectedDayHabitSummary.total
+        let completed = selectedDayHabitSummary.completed
+
+        guard isTodaySelectedDay else {
+            if total == 0 { return "No habits for this day." }
+            if selectedDayHabitSummary.isComplete { return "Habits complete" }
+            return "\(completed) of \(total) habits complete"
+        }
+
+        if total == 0 || completed == 0 {
+            return "Start small today."
         }
         if selectedDayHabitSummary.isComplete {
-            return "Habits complete."
+            return "Habits complete"
         }
-        return "\(selectedDayHabitSummary.completed) of \(selectedDayHabitSummary.total) habits complete."
+        return "\(completed) of \(total) habits complete"
+    }
+
+    private var headerSecondaryLine: String? {
+        let total = selectedDayHabitSummary.total
+        let completed = selectedDayHabitSummary.completed
+
+        guard isTodaySelectedDay else { return nil }
+
+        if total == 0 || completed == 0 {
+            return "Complete one habit to begin your streak."
+        }
+        if selectedDayHabitSummary.isComplete {
+            let streakDays = max(1, currentStreak)
+            return "Streak: \(streakDays) day\(streakDays == 1 ? "" : "s")"
+        }
+        return "One more to close the day."
     }
 
     private var currentStreak: Int {
@@ -340,42 +404,6 @@ struct TodayView: View {
         return streak
     }
 
-    private var headerMomentumLine: String? {
-        guard isTodaySelectedDay else { return nil }
-        switch streakPresentation {
-        case .ongoing(let day):
-            return "Streak: Day \(day)"
-        case .freshStart:
-            return "New streak"
-        case .restart:
-            return "New streak begins."
-        }
-    }
-
-    private var streakPresentation: StreakPresentation {
-        if currentStreak > 0 {
-            return .ongoing(currentStreak)
-        }
-        return hasAnyCompletedHabitDay ? .restart : .freshStart
-    }
-
-    private var completionAffirmationLine: String? {
-        guard isTodaySelectedDay, allHabitsComplete else { return nil }
-        let options = [
-            "Consistency builds identity.",
-            "Another day aligned.",
-            "You kept your word to yourself."
-        ]
-        return options[dayRotationSeed % options.count]
-    }
-
-    private var hasAnyCompletedHabitDay: Bool {
-        let completedDays = Set(habitCompletions.map { calendar.startOfDay(for: $0.day) })
-        return completedDays.contains { day in
-            day < todayStart && habitSummary(for: day).isComplete
-        }
-    }
-
     private var totalFocusSecondsSelectedDay: Int {
         let end = calendar.date(byAdding: .day, value: 1, to: selectedDayStart) ?? .distantFuture
         let logged = sessions
@@ -403,6 +431,28 @@ struct TodayView: View {
 
     private var activeHabitsForSelectedDay: [Habit] {
         habits.filter { isHabit($0, activeOn: selectedDayStart) }
+    }
+
+    private var morningRitualsForSelectedDay: [Habit] {
+        activeHabitsForSelectedDay.filter { $0.timeOfDay == .morning }
+    }
+
+    private var ritualsForDisplay: [Habit] {
+        if isFirstTodayExperience && isTodaySelectedDay, let firstMorning = morningRitualsForSelectedDay.first {
+            let remaining = activeHabitsForSelectedDay.filter { $0.id != firstMorning.id }
+            return [firstMorning] + remaining
+        }
+        return activeHabitsForSelectedDay
+    }
+
+    private var hasMorningRitualForToday: Bool {
+        isFirstTodayExperience
+            && isTodaySelectedDay
+            && !morningRitualsForSelectedDay.isEmpty
+    }
+
+    private var showsFirstTaskHelperText: Bool {
+        isFirstTodayExperience && isTodaySelectedDay && visibleFocusTasks.isEmpty
     }
 
     private var completedHabitIDsForSelectedDay: Set<UUID> {
@@ -436,10 +486,6 @@ struct TodayView: View {
         Self.partOfDay(at: .now, calendar: calendar)
     }
 
-    private var dayRotationSeed: Int {
-        calendar.ordinality(of: .day, in: .year, for: todayStart) ?? 0
-    }
-
     private struct HabitDaySummary {
         let total: Int
         let completed: Int
@@ -452,12 +498,6 @@ struct TodayView: View {
             guard total > 0 else { return 0 }
             return CGFloat(completed) / CGFloat(total)
         }
-    }
-
-    private enum StreakPresentation {
-        case ongoing(Int)
-        case freshStart
-        case restart
     }
 
     var body: some View {
@@ -567,6 +607,7 @@ struct TodayView: View {
                 animatedCompletionRatio = habitCompletionRatio
                 hasInitializedHeaderProgress = true
                 visibleMonthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDayStart)) ?? selectedDayStart
+                configureFirstTodayExperienceIfNeeded()
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
@@ -629,6 +670,8 @@ struct TodayView: View {
                 focusTimer?.invalidate()
                 focusTimer = nil
                 hideBottomNavigation = false
+                tooltipHideWorkItem?.cancel()
+                tooltipHideWorkItem = nil
             }
             .animation(.snappy(duration: 0.18), value: showingFocusToast)
             .animation(.easeInOut(duration: 0.32), value: isFocusMode)
@@ -651,13 +694,6 @@ struct TodayView: View {
                     .buttonStyle(.plain)
                     .disabled(isTodaySelectedDay)
                     .accessibilityLabel(isTodaySelectedDay ? "Today" : "Return to Today")
-
-                    if !isTodaySelectedDay {
-                        Text("Tap to return to Today")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.textSecondary.opacity(0.72))
-                            .transition(.opacity)
-                    }
                 }
 
                 Spacer(minLength: 0)
@@ -670,16 +706,19 @@ struct TodayView: View {
                     Label("Focus", systemImage: "timer")
                         .font(Theme.Typography.bodySmallStrong)
                         .labelStyle(.titleAndIcon)
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(shouldHighlightFocusCallout ? Theme.text : Theme.accent)
                         .padding(.horizontal, Theme.Spacing.sm)
                         .padding(.vertical, Theme.Spacing.xxs)
                         .background(
                             Capsule(style: .continuous)
-                                .fill(Theme.accent.opacity(0.12))
+                                .fill(shouldHighlightFocusCallout ? Theme.accent.opacity(0.22) : Theme.accent.opacity(0.12))
                         )
                         .overlay {
                             Capsule(style: .continuous)
-                                .stroke(Theme.accent.opacity(0.26), lineWidth: 0.8)
+                                .stroke(
+                                    shouldHighlightFocusCallout ? Theme.accent.opacity(0.42) : Theme.accent.opacity(0.26),
+                                    lineWidth: 0.8
+                                )
                         }
                         .shadow(color: Theme.cardShadow().opacity(0.7), radius: 4, y: 2)
                 }
@@ -718,32 +757,28 @@ struct TodayView: View {
             }
             .animation(.easeInOut(duration: 0.24), value: animatedCompletionRatio)
 
-            Text(habitProgressLine)
+            Text(headerPrimaryLine)
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
                 .contentTransition(.numericText())
 
-            if let headerMomentumLine {
-                Text(headerMomentumLine)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+            if let headerSecondaryLine {
+                Text(headerSecondaryLine)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.textSecondary.opacity(0.78))
                     .contentTransition(.numericText())
-            }
-
-            if let completionAffirmationLine {
-                Text(completionAffirmationLine)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.textSecondary.opacity(0.72))
             }
         }
         .padding(.horizontal, Theme.Spacing.cardInset)
         .padding(.vertical, 10)
-        .scaleEffect(headerProgressPulse ? 1.01 : 1, anchor: .top)
         .background(
             headerBackground,
             in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
         )
         .shadow(color: Theme.cardShadow().opacity(0.85), radius: Theme.shadowRadius, y: Theme.shadowY)
+        .opacity(showHeaderEntrance ? 1 : 0)
+        .offset(y: showHeaderEntrance ? 0 : 10)
+        .animation(Motion.easing, value: showHeaderEntrance)
         .animation(.easeInOut(duration: 0.2), value: selectedDayStart)
     }
 
@@ -755,6 +790,31 @@ struct TodayView: View {
 
             if calendarMode == .week {
                 weekStrip
+                    .opacity(showWeekStripEntrance ? 1 : 0)
+                    .offset(y: showWeekStripEntrance ? 0 : 8)
+                    .animation(Motion.easing, value: showWeekStripEntrance)
+
+                if !isTodaySelectedDay {
+                    Button {
+                        returnToTodayFromHeader()
+                    } label: {
+                        Text("Back to Today")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.horizontal, Theme.Spacing.xs)
+                            .padding(.vertical, Theme.Spacing.xxxs)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Theme.accent.opacity(0.12))
+                            )
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .stroke(Theme.accent.opacity(0.28), lineWidth: 0.9)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             } else {
                 monthHeatmapPager
                     .transition(
@@ -767,6 +827,14 @@ struct TodayView: View {
         }
         .padding(Theme.Spacing.sm)
         .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
+        .overlay(alignment: .topLeading) {
+            if showTodayTooltip && calendarMode == .week {
+                todayTooltip
+                    .padding(.leading, Theme.Spacing.sm)
+                    .padding(.top, 56)
+                    .transition(.opacity)
+            }
+        }
         .animation(.snappy(duration: 0.22), value: calendarMode)
     }
 
@@ -866,6 +934,23 @@ struct TodayView: View {
         .animation(.easeOut(duration: 0.16), value: calendarMode)
     }
 
+    private var todayTooltip: some View {
+        Text("Tap a date to view another day.")
+            .font(Theme.Typography.caption)
+            .foregroundStyle(Theme.textSecondary)
+            .padding(.horizontal, Theme.Spacing.xs)
+            .padding(.vertical, Theme.Spacing.xxxs)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Theme.surface)
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(Theme.textSecondary.opacity(0.14), lineWidth: 0.8)
+            }
+            .shadow(color: Theme.cardShadow().opacity(0.65), radius: 6, y: 2)
+    }
+
     private var weekStrip: some View {
         HStack(spacing: Theme.Spacing.xs) {
             ForEach(weekDays, id: \.self) { day in
@@ -878,13 +963,14 @@ struct TodayView: View {
         let summary = habitSummary(for: day)
         let isSelected = calendar.isDate(day, inSameDayAs: selectedDayStart)
         let tileState = tileState(for: day, summary: summary)
-        let completionState = weekStripCompletionState(for: day, summary: summary)
         let isToday = calendar.isDate(day, inSameDayAs: todayStart)
+        let isFutureDay = isFuture(day)
+        let isCompleteDay = allHabitsComplete(day) && !isFutureDay
 
         return Button {
             selectDayInline(day)
         } label: {
-            VStack(spacing: Theme.Spacing.xxs) {
+            VStack(spacing: Theme.Spacing.xxxs) {
                 Text(day.formatted(.dateTime.weekday(.narrow)))
                     .font(Theme.Typography.caption.weight(.medium))
                     .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
@@ -892,31 +978,23 @@ struct TodayView: View {
                 Text(day.formatted(.dateTime.day()))
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(isSelected ? Theme.accent : Theme.text)
+
+                Circle()
+                    .fill(isCompleteDay ? Theme.accent : .clear)
+                    .frame(width: 4, height: 4)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, Theme.Spacing.xs)
+            .opacity(isFutureDay ? 0.6 : 1)
             .background(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .fill(tileState.fill)
-                    .overlay {
-                        if let tintOpacity = weekStripCompletionTintOpacity(for: completionState, isSelected: isSelected) {
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .fill(Theme.accent.opacity(tintOpacity))
-                        }
-                    }
                     .overlay {
                         RoundedRectangle(cornerRadius: 11, style: .continuous)
                             .stroke(
                                 isSelected ? Theme.accent.opacity(0.68) : (isToday ? Theme.accent.opacity(0.32) : tileState.stroke),
                                 lineWidth: isSelected ? 1 : 0.8
                             )
-                    }
-                    .overlay {
-                        if let ring = weekStripCompletionRing(for: completionState, isSelected: isSelected) {
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .stroke(ring.color, lineWidth: ring.width)
-                                .padding(1)
-                        }
                     }
             )
         }
@@ -1094,18 +1172,6 @@ struct TodayView: View {
         }
     }
 
-    private enum WeekStripCompletionState {
-        case none
-        case partial
-        case full
-        case future
-    }
-
-    private struct CompletionRingStyle {
-        let color: Color
-        let width: CGFloat
-    }
-
     private func tileFill(for state: CalendarTileState) -> Color {
         state.fill
     }
@@ -1134,43 +1200,6 @@ struct TodayView: View {
     private func allHabitsComplete(_ date: Date) -> Bool {
         let total = totalHabits(date)
         return total > 0 && completedHabits(date) == total
-    }
-
-    private func weekStripCompletionState(for day: Date, summary: HabitDaySummary) -> WeekStripCompletionState {
-        if isFuture(day) {
-            return .future
-        }
-        if allHabitsComplete(day) {
-            return .full
-        }
-        if summary.completed > 0 {
-            return .partial
-        }
-        return .none
-    }
-
-    private func weekStripCompletionTintOpacity(for state: WeekStripCompletionState, isSelected: Bool) -> Double? {
-        guard !isSelected else { return nil }
-        switch state {
-        case .full:
-            return 0.08
-        case .partial:
-            return 0.03
-        case .none, .future:
-            return nil
-        }
-    }
-
-    private func weekStripCompletionRing(for state: WeekStripCompletionState, isSelected: Bool) -> CompletionRingStyle? {
-        guard !isSelected else { return nil }
-        switch state {
-        case .full:
-            return CompletionRingStyle(color: Theme.accent.opacity(0.38), width: 1.2)
-        case .partial:
-            return CompletionRingStyle(color: Theme.accent.opacity(0.2), width: 0.9)
-        case .none, .future:
-            return nil
-        }
     }
 
     private func monthGridHeight(for monthStart: Date) -> CGFloat {
@@ -1255,31 +1284,87 @@ struct TodayView: View {
         )
     }
 
+    private func configureFirstTodayExperienceIfNeeded() {
+        guard !hasConfiguredFirstTodayExperience else { return }
+        hasConfiguredFirstTodayExperience = true
+
+        guard session.shouldShowFirstTodayExperience else {
+            showHeaderEntrance = true
+            showWeekStripEntrance = true
+            showRitualSectionEntrance = true
+            showTasksSectionEntrance = true
+            return
+        }
+
+        isFirstTodayExperience = true
+        showHeaderEntrance = false
+        showWeekStripEntrance = false
+        showRitualSectionEntrance = false
+        showTasksSectionEntrance = false
+
+        DispatchQueue.main.async {
+            withAnimation(Motion.easing) {
+                showHeaderEntrance = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.stagger(1)) {
+            withAnimation(Motion.easing) {
+                showWeekStripEntrance = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.stagger(2)) {
+            withAnimation(Motion.easing) {
+                showRitualSectionEntrance = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.stagger(3)) {
+            withAnimation(Motion.easing) {
+                showTasksSectionEntrance = true
+            }
+        }
+
+        scheduleTodayTooltipIfNeeded()
+        session.consumeFirstTodayExperience()
+    }
+
+    private func scheduleTodayTooltipIfNeeded() {
+        guard !session.hasSeenTodayTooltip else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            withAnimation(Motion.easing) {
+                showTodayTooltip = true
+            }
+            session.markTodayTooltipSeen()
+
+            let hideWorkItem = DispatchWorkItem {
+                withAnimation(Motion.easing) {
+                    showTodayTooltip = false
+                }
+            }
+            tooltipHideWorkItem = hideWorkItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: hideWorkItem)
+        }
+    }
+
     private func animateHeaderProgress(triggerSuccess: Bool) {
         guard hasInitializedHeaderProgress else {
             animatedCompletionRatio = habitCompletionRatio
             return
         }
 
-        withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+        withAnimation(Motion.easing) {
             animatedCompletionRatio = habitCompletionRatio
-        }
-        withAnimation(.snappy(duration: 0.18)) {
-            headerProgressPulse = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            headerProgressPulse = false
         }
 
         guard triggerSuccess else { return }
-        let feedback = UIImpactFeedbackGenerator(style: .soft)
+        let feedback = UIImpactFeedbackGenerator(style: .light)
         feedback.impactOccurred()
 
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(Motion.easing) {
             headerCompletionGlow = true
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.62) {
-            withAnimation(.easeInOut(duration: 0.24)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.duration) {
+            withAnimation(Motion.easing) {
                 headerCompletionGlow = false
             }
         }
@@ -1319,21 +1404,21 @@ struct TodayView: View {
                     .foregroundStyle(Theme.textSecondary.opacity(0.88))
             }
 
-            appointmentsSectionContent
-
-            Rectangle()
-                .fill(Theme.textSecondary.opacity(0.12))
-                .frame(height: 0.8)
-                .padding(.vertical, Theme.Spacing.xxxs)
+            if shouldShowAppointmentsSection {
+                appointmentsSectionContent
+                sectionDivider
+            }
 
             habitsSectionContent
+                .opacity(showRitualSectionEntrance ? 1 : 0)
+                .offset(y: showRitualSectionEntrance ? 0 : 12)
+                .animation(Motion.easing, value: showRitualSectionEntrance)
 
-            Rectangle()
-                .fill(Theme.textSecondary.opacity(0.12))
-                .frame(height: 0.8)
-                .padding(.vertical, Theme.Spacing.xxxs)
+            sectionDivider
 
             supportSectionContent
+                .opacity(showTasksSectionEntrance ? 1 : 0)
+                .animation(Motion.easing, value: showTasksSectionEntrance)
                 .transition(.opacity)
         }
         .padding(Theme.Spacing.cardInset)
@@ -1341,24 +1426,51 @@ struct TodayView: View {
         .animation(.easeInOut(duration: 0.22), value: selectedDayStart)
     }
 
+    private var sectionDivider: some View {
+        Rectangle()
+            .fill(Theme.textSecondary.opacity(0.12))
+            .frame(height: 0.8)
+            .padding(.vertical, Theme.Spacing.xxxs)
+    }
+
     private var habitsSectionContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Habits")
+            Text("Rituals")
                 .font(Theme.Typography.sectionLabel)
                 .tracking(Theme.Typography.sectionTracking)
                 .foregroundStyle(Theme.textSecondary.opacity(0.88))
 
-            if activeHabitsForSelectedDay.isEmpty {
-                Text("No habits for this day.")
+            if hasMorningRitualForToday {
+                Text("Morning rituals ready.")
+                    .font(Theme.Typography.bodySmall)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+
+            if ritualsForDisplay.isEmpty {
+                Text("No rituals for this day.")
                     .font(Theme.Typography.bodySmall)
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.vertical, Theme.Spacing.xxs)
             } else {
                 VStack(spacing: Theme.Spacing.xxs) {
-                    ForEach(activeHabitsForSelectedDay) { habit in
+                    ForEach(ritualsForDisplay) { habit in
                         habitRow(for: habit)
                     }
                 }
+            }
+        }
+        .padding(.horizontal, shouldEmphasizeRitualSection ? Theme.Spacing.xxs : 0)
+        .padding(.vertical, shouldEmphasizeRitualSection ? Theme.Spacing.xxs : 0)
+        .background {
+            if shouldEmphasizeRitualSection {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Theme.accent.opacity(0.06))
+            }
+        }
+        .overlay {
+            if shouldEmphasizeRitualSection {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Theme.accent.opacity(0.2), lineWidth: 0.8)
             }
         }
     }
@@ -1401,15 +1513,9 @@ struct TodayView: View {
     private var appointmentsSectionContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Appointments")
+                Text(appointmentsForSelectedDay.isEmpty ? "Appointments" : "Appointments · \(appointmentsForSelectedDay.count)")
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.textSecondary.opacity(0.82))
-
-                if !appointmentsForSelectedDay.isEmpty {
-                    Text("\(appointmentsForSelectedDay.count)")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.textSecondary.opacity(0.72))
-                }
 
                 Spacer(minLength: 0)
 
@@ -1465,7 +1571,7 @@ struct TodayView: View {
     private var supportSectionContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Support")
+                Text("Tasks")
                     .font(Theme.Typography.caption.weight(.semibold))
                     .foregroundStyle(Theme.textSecondary.opacity(0.82))
 
@@ -1544,11 +1650,17 @@ struct TodayView: View {
             }
 
             if visibleFocusTasks.isEmpty {
-                EmptyStatePanel(
-                    symbol: "checklist",
-                    title: isTodaySelectedDay ? "No tasks yet" : "No tasks assigned",
-                    subtitle: isTodaySelectedDay ? "Use + to schedule your next task." : "Nothing scheduled for this day."
-                )
+                if showsFirstTaskHelperText {
+                    Text("Add a task with + to plan your day.")
+                        .font(Theme.Typography.bodySmall)
+                        .foregroundStyle(Theme.textSecondary)
+                } else {
+                    EmptyStatePanel(
+                        symbol: "checklist",
+                        title: isTodaySelectedDay ? "No tasks yet" : "No tasks assigned",
+                        subtitle: isTodaySelectedDay ? "Use + to schedule your next task." : "Nothing scheduled for this day."
+                    )
+                }
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
                     ForEach(visibleFocusTasks) { task in
