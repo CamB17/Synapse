@@ -33,7 +33,7 @@ struct TodayView: View {
     @Query(sort: [SortDescriptor(\HabitPausePeriod.startDay, order: .reverse)])
     private var habitPausePeriods: [HabitPausePeriod]
 
-    @Query(sort: [SortDescriptor(\FocusSession.startedAt, order: .reverse)])
+    @Query(sort: [SortDescriptor(\FocusSession.startDate, order: .reverse)])
     private var sessions: [FocusSession]
 
     @Query(sort: [SortDescriptor(\Appointment.startDate, order: .forward)])
@@ -66,6 +66,7 @@ struct TodayView: View {
     @State private var focusTimer: Timer?
     @State private var focusTaskSeconds: [UUID: Int] = [:]
     @State private var focusActiveTaskID: UUID?
+    @State private var showingFocusSetup = false
 
     @State private var focusToastMessage = ""
     @State private var showingFocusToast = false
@@ -211,6 +212,15 @@ struct TodayView: View {
     private var filteredTasksForSelectedDay: [TaskItem] {
         guard isTodaySelectedDay else { return assignedTasksForSelectedDay }
         return assignedTasksForSelectedDay.filter(matchesFocusTimeFilter)
+    }
+
+    private var focusSetupTasks: [TaskItem] {
+        sortedByPriority(
+            todayTasks.filter { task in
+                guard let day = assignedDay(for: task) else { return false }
+                return calendar.isDate(day, inSameDayAs: todayStart)
+            }
+        )
     }
 
     private var highPriorityTasks: [TaskItem] {
@@ -406,10 +416,9 @@ struct TodayView: View {
 
     private var totalFocusSecondsSelectedDay: Int {
         let end = calendar.date(byAdding: .day, value: 1, to: selectedDayStart) ?? .distantFuture
-        let logged = sessions
-            .filter { $0.startedAt >= selectedDayStart && $0.startedAt < end }
-            .reduce(0) { $0 + $1.durationSeconds }
-        return logged + (calendar.isDateInToday(selectedDayStart) ? focusElapsedSeconds : 0)
+        return sessions
+            .filter { $0.startDate >= selectedDayStart && $0.startDate < end }
+            .reduce(0) { $0 + $1.loggedSeconds }
     }
 
     private enum SelectedDayRelation {
@@ -597,13 +606,22 @@ struct TodayView: View {
                     }
                 }
             }
+            .fullScreenCover(isPresented: $showingFocusSetup) {
+                FocusSetupView(
+                    tasks: focusSetupTasks,
+                    onSessionLogged: { minutes in
+                        showFocusToast(minutes: minutes)
+                    },
+                    onCancel: {}
+                )
+            }
             .onAppear {
                 backfillHabitCompletionsIfNeeded()
                 synchronizeDayState()
                 synchronizeFocusFilterWithCurrentPartOfDay(force: true)
                 ensureCalendarSyncSettingsIfNeeded()
                 syncAppointmentsIfNeeded()
-                hideBottomNavigation = isFocusMode
+                hideBottomNavigation = isFocusMode || showingFocusSetup
                 animatedCompletionRatio = habitCompletionRatio
                 hasInitializedHeaderProgress = true
                 visibleMonthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDayStart)) ?? selectedDayStart
@@ -632,6 +650,9 @@ struct TodayView: View {
             .onChange(of: externalCaptureRequestID) { _, _ in
                 showingCapture = true
             }
+            .onChange(of: showingFocusSetup) { _, isPresented in
+                hideBottomNavigation = isFocusMode || isPresented
+            }
             .onChange(of: isFocusMode) { _, isEnabled in
                 if isEnabled, focusActiveTaskID == nil {
                     focusActiveTaskID = highPriorityTasks.first?.id
@@ -639,7 +660,7 @@ struct TodayView: View {
                 if isEnabled, !focusIsRunning {
                     startFocusTimer()
                 }
-                hideBottomNavigation = isEnabled
+                hideBottomNavigation = isEnabled || showingFocusSetup
             }
             .onChange(of: calendarMode) { _, newMode in
                 guard newMode == .month else { return }
@@ -701,7 +722,7 @@ struct TodayView: View {
                 Button {
                     let haptic = UIImpactFeedbackGenerator(style: .soft)
                     haptic.impactOccurred()
-                    toggleFocusMode()
+                    openFocusSetup()
                 } label: {
                     Label("Focus", systemImage: "timer")
                         .font(Theme.Typography.bodySmallStrong)
@@ -1667,7 +1688,7 @@ struct TodayView: View {
                         FocusTaskRow(
                             task: task,
                             namespace: taskNamespace,
-                            isActive: isFocusMode && focusActiveTaskID == task.id,
+                            isActive: focusActiveTaskID == task.id,
                             canComplete: isTodaySelectedDay,
                             onSelect: {
                                 withAnimation(.snappy(duration: 0.16)) {
@@ -1841,18 +1862,18 @@ struct TodayView: View {
         Button {
             let haptic = UIImpactFeedbackGenerator(style: .medium)
             haptic.impactOccurred()
-            toggleFocusMode()
+            openFocusSetup()
         } label: {
             HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: "timer")
                     .font(Theme.Typography.iconCard)
-                Text(isFocusMode ? "In Focus" : "Focus")
+                Text("Focus")
                     .font(Theme.Typography.bodySmallStrong)
             }
             .foregroundStyle(.white)
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.sm)
-            .background(isFocusMode ? Theme.accent2 : Theme.accent, in: Capsule(style: .continuous))
+            .background(Theme.accent, in: Capsule(style: .continuous))
             .shadow(color: Theme.cardShadow(), radius: Theme.shadowRadius, y: Theme.shadowY)
         }
         .buttonStyle(.plain)
@@ -1986,6 +2007,12 @@ struct TodayView: View {
         try? modelContext.save()
     }
 
+    private func openFocusSetup() {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            showingFocusSetup = true
+        }
+    }
+
     private func toggleFocusMode() {
         if isFocusMode {
             if focusIsRunning {
@@ -2034,9 +2061,14 @@ struct TodayView: View {
 
         let now = Date()
         for (taskID, seconds) in focusTaskSeconds where seconds > 0 {
-            let session = FocusSession(taskId: taskID, startedAt: now.addingTimeInterval(TimeInterval(-seconds)))
-            session.endedAt = now
-            session.durationSeconds = seconds
+            let session = FocusSession(
+                startDate: now.addingTimeInterval(TimeInterval(-seconds)),
+                durationSeconds: nil,
+                elapsedSeconds: seconds,
+                isPaused: true,
+                taskId: taskID
+            )
+            session.finalize(at: now)
             modelContext.insert(session)
 
             if let task = task(withID: taskID) {

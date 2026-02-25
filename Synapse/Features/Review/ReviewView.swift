@@ -5,7 +5,7 @@ struct ReviewView: View {
     @Query(sort: [SortDescriptor(\TaskItem.createdAt, order: .forward)])
     private var tasks: [TaskItem]
 
-    @Query(sort: [SortDescriptor(\FocusSession.startedAt, order: .forward)])
+    @Query(sort: [SortDescriptor(\FocusSession.startDate, order: .forward)])
     private var sessions: [FocusSession]
 
     @Query(sort: [SortDescriptor(\Habit.createdAt, order: .forward)])
@@ -246,12 +246,12 @@ struct ReviewView: View {
     private var dailySessions: [FocusSession] {
         let end = calendar.date(byAdding: .day, value: 1, to: selectedDayStart) ?? .distantFuture
         return sessions
-            .filter { $0.startedAt >= selectedDayStart && $0.startedAt < end }
-            .sorted { $0.startedAt > $1.startedAt }
+            .filter { $0.startDate >= selectedDayStart && $0.startDate < end }
+            .sorted { $0.startDate > $1.startDate }
     }
 
     private var dailyFocusSeconds: Int {
-        dailySessions.reduce(0) { $0 + $1.durationSeconds }
+        dailySessions.reduce(0) { $0 + $1.loggedSeconds }
     }
 
     private var dailyFocusMinutes: Int {
@@ -267,8 +267,8 @@ struct ReviewView: View {
     private var dailyFocusMinutesByBucket: [TimeBucket: Int] {
         var output: [TimeBucket: Int] = Dictionary(uniqueKeysWithValues: TimeBucket.allCases.map { ($0, 0) })
         for session in dailySessions {
-            let bucket = timeBucket(for: session.startedAt)
-            output[bucket, default: 0] += max(0, session.durationSeconds / 60)
+            let bucket = timeBucket(for: session.startDate)
+            output[bucket, default: 0] += max(0, session.loggedSeconds / 60)
         }
         return output
     }
@@ -443,14 +443,14 @@ struct ReviewView: View {
 
     private var selectedMonthSessions: [FocusSession] {
         let range = selectedMonthDataRange
-        return sessions.filter { $0.startedAt >= range.start && $0.startedAt < range.end }
+        return sessions.filter { $0.startDate >= range.start && $0.startDate < range.end }
     }
 
     private var monthlyFocusMinutesByBucket: [TimeBucket: Int] {
         var values: [TimeBucket: Int] = Dictionary(uniqueKeysWithValues: TimeBucket.allCases.map { ($0, 0) })
         for session in selectedMonthSessions {
-            let bucket = timeBucket(for: session.startedAt)
-            values[bucket, default: 0] += max(0, session.durationSeconds / 60)
+            let bucket = timeBucket(for: session.startDate)
+            values[bucket, default: 0] += max(0, session.loggedSeconds / 60)
         }
         return values
     }
@@ -497,7 +497,7 @@ struct ReviewView: View {
     }
 
     private var monthlyFocusMinutes: Int {
-        selectedMonthSessions.reduce(0) { $0 + max(0, $1.durationSeconds / 60) }
+        selectedMonthSessions.reduce(0) { $0 + max(0, $1.loggedSeconds / 60) }
     }
 
     private var monthlyAverageSessionMinutes: Int? {
@@ -883,13 +883,13 @@ struct ReviewView: View {
                                         .font(Theme.Typography.caption)
                                         .foregroundStyle(Theme.textSecondary.opacity(0.74))
 
-                                    Text(session.startedAt.formatted(.dateTime.hour().minute()))
+                                    Text(session.startDate.formatted(.dateTime.hour().minute()))
                                         .font(Theme.Typography.bodySmall)
                                         .foregroundStyle(Theme.text)
 
                                     Spacer(minLength: 0)
 
-                                    Text(formatMinutesLabel(fromMinutes: max(0, session.durationSeconds / 60)))
+                                    Text(formatMinutesLabel(fromMinutes: max(0, session.loggedSeconds / 60)))
                                         .font(Theme.Typography.caption.weight(.semibold))
                                         .foregroundStyle(Theme.textSecondary)
                                 }
@@ -1705,8 +1705,8 @@ struct ReviewView: View {
         }
 
         let focusMinutes = sessions
-            .filter { $0.startedAt >= range.start && $0.startedAt < range.end }
-            .reduce(0) { $0 + max(0, $1.durationSeconds / 60) }
+            .filter { $0.startDate >= range.start && $0.startDate < range.end }
+            .reduce(0) { $0 + max(0, $1.loggedSeconds / 60) }
 
         return MonthMetrics(
             fullDays: fullDays,
@@ -1846,9 +1846,9 @@ struct ReviewView: View {
         let days = monthDays(for: monthStart).filter { $0 <= evaluationEnd }
 
         var focusMinutesByDay: [Date: Int] = Dictionary(uniqueKeysWithValues: days.map { ($0, 0) })
-        for session in sessions where session.startedAt >= range.start && session.startedAt < range.end {
-            let day = calendar.startOfDay(for: session.startedAt)
-            focusMinutesByDay[day, default: 0] += max(0, session.durationSeconds / 60)
+        for session in sessions where session.startDate >= range.start && session.startDate < range.end {
+            let day = calendar.startOfDay(for: session.startDate)
+            focusMinutesByDay[day, default: 0] += max(0, session.loggedSeconds / 60)
         }
 
         let evaluableDays = days.filter { habitSummary(for: $0).total > 0 }

@@ -17,7 +17,7 @@ struct DayDetailView: View {
     @Query(sort: [SortDescriptor(\TaskItem.createdAt, order: .forward)])
     private var tasks: [TaskItem]
 
-    @Query(sort: [SortDescriptor(\FocusSession.startedAt, order: .reverse)])
+    @Query(sort: [SortDescriptor(\FocusSession.startDate, order: .reverse)])
     private var sessions: [FocusSession]
 
     @Query(sort: [SortDescriptor(\Appointment.startDate, order: .forward)])
@@ -129,8 +129,8 @@ struct DayDetailView: View {
     private var focusSecondsForDay: Int {
         let end = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? .distantFuture
         return sessions
-            .filter { $0.startedAt >= dayStart && $0.startedAt < end }
-            .reduce(0) { $0 + $1.durationSeconds }
+            .filter { $0.startDate >= dayStart && $0.startDate < end }
+            .reduce(0) { $0 + $1.loggedSeconds }
     }
 
     var body: some View {
