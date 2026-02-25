@@ -607,7 +607,7 @@ struct TodayView: View {
                 }
             }
             .fullScreenCover(isPresented: $showingFocusSetup) {
-                FocusSetupView(
+                FocusFlowView(
                     tasks: focusSetupTasks,
                     onSessionLogged: { minutes in
                         showFocusToast(minutes: minutes)
