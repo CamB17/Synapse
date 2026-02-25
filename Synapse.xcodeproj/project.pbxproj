@@ -257,6 +257,7 @@
 				DEVELOPMENT_TEAM = KXBZL7HQG3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "Use calendar access to sync time-bound appointments into Synapse.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Use the microphone to quickly capture tasks and habits.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Convert your voice into text for task and habit capture.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -292,6 +293,7 @@
 				DEVELOPMENT_TEAM = KXBZL7HQG3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsUsageDescription = "Use calendar access to sync time-bound appointments into Synapse.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Use the microphone to quickly capture tasks and habits.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Convert your voice into text for task and habit capture.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

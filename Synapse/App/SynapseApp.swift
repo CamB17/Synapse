@@ -4,6 +4,7 @@ import SwiftData
 @main
 struct SynapseApp: App {
     let container: ModelContainer
+    @StateObject private var session = AppSession()
 
     init() {
         let schema = Schema([
@@ -11,7 +12,10 @@ struct SynapseApp: App {
             FocusSession.self,
             Habit.self,
             HabitCompletion.self,
-            HabitPausePeriod.self
+            HabitPausePeriod.self,
+            Appointment.self,
+            CalendarSyncSettings.self,
+            UserPreferences.self
         ])
         let config = ModelConfiguration(
             schema: schema,
@@ -27,7 +31,8 @@ struct SynapseApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            AppEntryView()
+                .environmentObject(session)
                 .modelContainer(container)
         }
     }

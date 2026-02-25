@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-enum RitualFrequency: String, Codable, CaseIterable {
+enum HabitFrequency: String, Codable, CaseIterable {
     case daily
     case weekly
     case custom
@@ -25,7 +25,7 @@ final class Habit {
     @Attribute(originalName: "streakCount")
     var currentStreak: Int = 0
     var isActive: Bool = true
-    var frequencyRaw: String = RitualFrequency.daily.rawValue
+    var frequencyRaw: String = HabitFrequency.daily.rawValue
     var timeOfDayRaw: String = TaskPartOfDay.anytime.rawValue
     var scheduledWeekdaysRaw: String = ""
     var sortOrder: Int = 0
@@ -33,7 +33,7 @@ final class Habit {
 
     init(
         title: String,
-        frequency: RitualFrequency = .daily,
+        frequency: HabitFrequency = .daily,
         timeOfDay: TaskPartOfDay = .anytime,
         scheduledWeekdays: Set<Int> = [],
         sortOrder: Int = 0,
@@ -87,8 +87,8 @@ final class Habit {
         lastCompletedDate = Calendar.current.date(byAdding: .day, value: -1, to: .now)
     }
 
-    var frequency: RitualFrequency {
-        get { RitualFrequency(rawValue: frequencyRaw) ?? .daily }
+    var frequency: HabitFrequency {
+        get { HabitFrequency(rawValue: frequencyRaw) ?? .daily }
         set { frequencyRaw = newValue.rawValue }
     }
 
@@ -125,11 +125,11 @@ final class Habit {
     var frequencySummary: String {
         switch frequency {
         case .daily:
-            return RitualFrequency.daily.displayLabel
+            return HabitFrequency.daily.displayLabel
         case .weekly:
-            return "\(RitualFrequency.weekly.displayLabel) (\(weekdaySummary(limit: 1)))"
+            return "\(HabitFrequency.weekly.displayLabel) (\(weekdaySummary(limit: 1)))"
         case .custom:
-            return "\(RitualFrequency.custom.displayLabel) (\(weekdaySummary(limit: 7)))"
+            return "\(HabitFrequency.custom.displayLabel) (\(weekdaySummary(limit: 7)))"
         }
     }
 

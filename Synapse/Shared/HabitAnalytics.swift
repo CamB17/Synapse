@@ -1,6 +1,6 @@
 import Foundation
 
-enum RitualAnalytics {
+enum HabitAnalytics {
     static func isHabit(
         _ habit: Habit,
         activeOn day: Date,

@@ -143,9 +143,15 @@ struct FocusModeView: View {
         timer?.invalidate()
         timer = nil
 
-        let session = FocusSession(taskId: task.id, startedAt: .now)
-        session.endedAt = .now
-        session.durationSeconds = elapsedSeconds
+        let now = Date()
+        let session = FocusSession(
+            startDate: now.addingTimeInterval(TimeInterval(-elapsedSeconds)),
+            durationSeconds: nil,
+            elapsedSeconds: elapsedSeconds,
+            isPaused: true,
+            taskId: task.id
+        )
+        session.finalize(at: now)
 
         modelContext.insert(session)
 

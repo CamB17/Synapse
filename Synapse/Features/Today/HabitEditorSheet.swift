@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-struct RitualEditorSheet: View {
+struct HabitEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -10,9 +10,10 @@ struct RitualEditorSheet: View {
     let onSaved: ((Habit) -> Void)?
 
     @State private var title: String
-    @State private var frequency: RitualFrequency
+    @State private var frequency: HabitFrequency
     @State private var timeOfDay: TaskPartOfDay
     @State private var selectedWeekdays: Set<Int>
+    @State private var startDate: Date
 
     private var calendar: Calendar { .current }
 
@@ -25,11 +26,13 @@ struct RitualEditorSheet: View {
         let initialTimeOfDay = habit?.timeOfDay ?? .anytime
         let defaultWeekday = Calendar.current.component(.weekday, from: .now)
         let initialDays = habit?.scheduledWeekdays ?? [defaultWeekday]
+        let initialStartDate = Calendar.current.startOfDay(for: habit?.createdAt ?? .now)
 
         _title = State(initialValue: habit?.title ?? "")
         _frequency = State(initialValue: initialFrequency)
         _timeOfDay = State(initialValue: initialTimeOfDay)
         _selectedWeekdays = State(initialValue: initialDays.isEmpty ? [defaultWeekday] : initialDays)
+        _startDate = State(initialValue: initialStartDate)
     }
 
     var body: some View {
@@ -39,12 +42,13 @@ struct RitualEditorSheet: View {
                     titleCard
                     frequencyCard
                     timeCard
+                    startDateCard
                     Spacer(minLength: 0)
                 }
                 .padding(Theme.Spacing.md)
                 .padding(.top, Theme.Spacing.lg)
             }
-            .navigationTitle(habit == nil ? "Add Ritual" : "Edit Ritual")
+            .navigationTitle(habit == nil ? "Add Habit" : "Edit Habit")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
@@ -72,7 +76,7 @@ struct RitualEditorSheet: View {
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
 
-            TextField("Ritual name", text: $title)
+            TextField("Habit name", text: $title)
                 .font(Theme.Typography.bodyMedium)
                 .foregroundStyle(Theme.text)
                 .textInputAutocapitalization(.sentences)
@@ -89,9 +93,9 @@ struct RitualEditorSheet: View {
                 .foregroundStyle(Theme.textSecondary)
 
             Picker("Frequency", selection: $frequency) {
-                Text(RitualFrequency.daily.displayLabel).tag(RitualFrequency.daily)
-                Text(RitualFrequency.weekly.displayLabel).tag(RitualFrequency.weekly)
-                Text(RitualFrequency.custom.displayLabel).tag(RitualFrequency.custom)
+                Text(HabitFrequency.daily.displayLabel).tag(HabitFrequency.daily)
+                Text(HabitFrequency.weekly.displayLabel).tag(HabitFrequency.weekly)
+                Text(HabitFrequency.custom.displayLabel).tag(HabitFrequency.custom)
             }
             .pickerStyle(.segmented)
 
@@ -131,6 +135,25 @@ struct RitualEditorSheet: View {
                 Text(TaskPartOfDay.evening.displayLabel).tag(TaskPartOfDay.evening)
             }
             .pickerStyle(.segmented)
+        }
+        .padding(Theme.Spacing.cardInset)
+        .surfaceCard(cornerRadius: Theme.radiusSmall)
+    }
+
+    private var startDateCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("Start date")
+                .font(Theme.Typography.bodySmall)
+                .foregroundStyle(Theme.textSecondary)
+
+            DatePicker(
+                "Start date",
+                selection: $startDate,
+                displayedComponents: [.date]
+            )
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .tint(Theme.accent)
         }
         .padding(Theme.Spacing.cardInset)
         .surfaceCard(cornerRadius: Theme.radiusSmall)
@@ -218,6 +241,7 @@ struct RitualEditorSheet: View {
             habit.frequency = frequency
             habit.timeOfDay = timeOfDay
             habit.scheduledWeekdays = normalizedWeekdays
+            habit.createdAt = calendar.startOfDay(for: startDate)
         } else {
             let newHabit = Habit(
                 title: trimmed,
@@ -226,6 +250,7 @@ struct RitualEditorSheet: View {
                 scheduledWeekdays: normalizedWeekdays,
                 sortOrder: defaultSortOrder
             )
+            newHabit.createdAt = calendar.startOfDay(for: startDate)
             modelContext.insert(newHabit)
             onSaved?(newHabit)
         }
@@ -238,7 +263,7 @@ struct RitualEditorSheet: View {
             try modelContext.save()
             dismiss()
         } catch {
-            print("Ritual save error: \(error)")
+            print("Habit save error: \(error)")
         }
     }
 }
