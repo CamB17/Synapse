@@ -516,7 +516,7 @@ struct TodayView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                TodayBackgroundView()
+                TodayAtmosphereBackground()
 
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: TodayPremiumTokens.sectionSpacing) {
@@ -557,82 +557,91 @@ struct TodayView: View {
                             monthHeatmapPager
                         }
 
-                        HabitMomentumCard(
-                            completedHabitsCount: completedHabitsCount,
-                            totalActiveHabitsCount: totalActiveHabitsCount,
-                            habitsProgress: habitsProgress,
-                            showCompletionPulse: headerCompletionGlow,
-                            items: habitQuickRows,
-                            onToggleHabit: { habitID in
-                                guard let habit = activeHabitsForSelectedDay.first(where: { $0.id == habitID }) else { return }
-                                toggleHabitForSelectedDay(habit)
-                            },
-                            onManageTap: {
-                                openHabitsOverview()
-                            },
-                            onAddHabitTap: {
-                                openHabitEditor()
-                            }
-                        )
+                        VStack(alignment: .leading, spacing: TodayPremiumTokens.sectionSpacing) {
+                            HabitMomentumCard(
+                                completedHabitsCount: completedHabitsCount,
+                                totalActiveHabitsCount: totalActiveHabitsCount,
+                                habitsProgress: habitsProgress,
+                                showCompletionPulse: headerCompletionGlow,
+                                items: habitQuickRows,
+                                onToggleHabit: { habitID in
+                                    guard let habit = activeHabitsForSelectedDay.first(where: { $0.id == habitID }) else { return }
+                                    toggleHabitForSelectedDay(habit)
+                                },
+                                onManageTap: {
+                                    openHabitsOverview()
+                                },
+                                onAddHabitTap: {
+                                    openHabitEditor()
+                                }
+                            )
 
-                        AppointmentsPreviewCard(
-                            totalCount: appointmentsForSelectedDay.count,
-                            upcomingLine: upcomingAppointmentLine,
-                            items: appointmentPreviewItems,
-                            remainingCount: remainingAppointmentCount,
-                            onTapItem: { appointmentID in
-                                openAppointment(with: appointmentID)
-                            },
-                            onViewAll: {
-                                openAppointmentsOverview()
-                            },
-                            onAdd: {
-                                openNewAppointmentEditor()
-                            }
-                        )
+                            AppointmentsPreviewCard(
+                                totalCount: appointmentsForSelectedDay.count,
+                                upcomingLine: upcomingAppointmentLine,
+                                items: appointmentPreviewItems,
+                                remainingCount: remainingAppointmentCount,
+                                onTapItem: { appointmentID in
+                                    openAppointment(with: appointmentID)
+                                },
+                                onViewAll: {
+                                    openAppointmentsOverview()
+                                },
+                                onAdd: {
+                                    openNewAppointmentEditor()
+                                }
+                            )
 
-                        TasksSectionHeader(
-                            timeOfDayLabel: timeOfDayLabel,
-                            symbolName: timeOfDaySymbolName
-                        )
+                            TasksSectionHeader(
+                                timeOfDayLabel: timeOfDayLabel,
+                                symbolName: timeOfDaySymbolName
+                            )
 
-                        TimeOfDayChipsRow(
-                            options: FocusTimeFilter.allCases.map(\.label),
-                            selectedOption: selectedFocusFilterLabel,
-                            onSelect: { label in
-                                selectFocusFilter(with: label)
-                            }
-                        )
+                            TimeOfDayChipsRow(
+                                options: FocusTimeFilter.allCases.map(\.label),
+                                selectedOption: selectedFocusFilterLabel,
+                                onSelect: { label in
+                                    selectFocusFilter(with: label)
+                                }
+                            )
 
-                        TasksListCard(
-                            upNextSubtitle: nil,
-                            upNextEstimate: nil,
-                            tasks: tasksListItems,
-                            emptyStateText: tasksEmptyStateLine,
-                            onTaskTap: { taskID in
-                                selectTask(with: taskID)
-                            },
-                            onCompleteTask: { taskID in
-                                completeTaskInPremiumList(with: taskID)
-                            },
-                            onViewAll: {
-                                openTasksOverview()
-                            },
-                            onQuickAdd: {
-                                showingCapture = true
-                            }
-                        )
-                        .id("tasks-list-\(focusTimeFilter.rawValue)")
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .offset(y: 6).combined(with: .opacity)
+                            TasksListCard(
+                                upNextTitle: upNextTaskTitle,
+                                upNextEstimate: upNextTaskEstimate,
+                                tasks: tasksListItems,
+                                emptyStateTitle: tasksEmptyStateTitle,
+                                emptyStateSubtitle: tasksEmptyStateSubtitle,
+                                onTaskTap: { taskID in
+                                    selectTask(with: taskID)
+                                },
+                                onCompleteTask: { taskID in
+                                    completeTaskInPremiumList(with: taskID)
+                                },
+                                onViewAll: {
+                                    openTasksOverview()
+                                },
+                                onQuickAdd: {
+                                    showingCapture = true
+                                }
+                            )
+                            .id("tasks-list-\(focusTimeFilter.rawValue)-\(selectedDayStart.timeIntervalSince1970)")
+                            .transition(
+                                reduceMotion
+                                    ? .opacity
+                                    : .offset(y: 6).combined(with: .opacity)
+                            )
+                        }
+                        .id(selectedDayStart)
+                        .transition(.opacity)
+                        .animation(
+                            reduceMotion ? .linear(duration: 0) : .easeInOut(duration: 0.22),
+                            value: selectedDayStart
                         )
 
                     }
                     .padding(.horizontal, TodayPremiumTokens.pageHorizontalPadding)
-                    .padding(.top, 8)
-                    .padding(.bottom, 36)
+                    .padding(.top, TodayPremiumTokens.pageTopPadding)
+                    .padding(.bottom, TodayPremiumTokens.pageBottomPadding)
                 }
 
                 if showingFocusToast {
@@ -1009,6 +1018,14 @@ struct TodayView: View {
         }
     }
 
+    private var upNextTaskTitle: String? {
+        tasksListItems.first?.title
+    }
+
+    private var upNextTaskEstimate: String? {
+        tasksListItems.first?.minutesLabel
+    }
+
     private func taskIcon(for task: TaskItem) -> (icon: String, tint: Color) {
         switch task.priority {
         case .high:
@@ -1044,8 +1061,12 @@ struct TodayView: View {
         return appointment.isAllDay ? "All-day appointment" : "Appointment"
     }
 
-    private var tasksEmptyStateLine: String {
-        "You're clear for now"
+    private var tasksEmptyStateTitle: String {
+        isTodaySelectedDay ? "No tasks yet" : "No tasks scheduled"
+    }
+
+    private var tasksEmptyStateSubtitle: String {
+        isTodaySelectedDay ? "Quick add something small" : "Nothing assigned for this day"
     }
 
     private var nextHabitSortOrder: Int {
@@ -1068,10 +1089,6 @@ struct TodayView: View {
     }
 
     private func openAppointmentsOverview() {
-        if appointmentsForSelectedDay.isEmpty {
-            openNewAppointmentEditor()
-            return
-        }
         selectedDayDetail = DayDetailSelection(day: selectedDayStart)
     }
 
