@@ -7,6 +7,7 @@ struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var selectedTab: Tab = .today
     @State private var captureRequestID = 0
+    @State private var focusRequestID = 0
     @State private var hideTabBar = false
     @State private var showingUniversalCapture = false
     @State private var showingTaskCapture = false
@@ -41,6 +42,7 @@ struct RootView: View {
             TodayView(
                 taskNamespace: taskNamespace,
                 externalCaptureRequestID: $captureRequestID,
+                externalFocusRequestID: $focusRequestID,
                 hideBottomNavigation: $hideTabBar
             )
             .opacity(selectedTab == .today ? 1 : 0)
@@ -114,13 +116,12 @@ struct RootView: View {
 
     private var customTabBar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: Theme.Spacing.sm) {
+            HStack(spacing: Theme.Spacing.xs) {
                 tabButton(tab: .today, title: "Today", icon: "checklist")
-
-                addCaptureButton
-
                 tabButton(tab: .habits, title: "Habits", icon: "leaf")
                 tabButton(tab: .review, title: "Review", icon: "chart.bar")
+                focusNavButton
+                addCaptureButton
             }
             .padding(.horizontal, Theme.Spacing.lg)
             .padding(.top, Theme.Spacing.compact)
@@ -169,12 +170,38 @@ struct RootView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var focusNavButton: some View {
+        Button {
+            openFocusFromNavigation()
+        } label: {
+            VStack(spacing: Theme.Spacing.xxxs) {
+                Image(systemName: "timer")
+                    .font(Theme.Typography.iconCard)
+                Text("Focus")
+                    .font(Theme.Typography.caption.weight(.semibold))
+            }
+            .foregroundStyle(Theme.textSecondary)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Focus")
+    }
+
     private var nextHabitSortOrder: Int {
         (habits.map(\.sortOrder).max() ?? -1) + 1
     }
 
     private var universalCaptureDetentHeight: CGFloat {
         332
+    }
+
+    private func openFocusFromNavigation() {
+        let haptic = UIImpactFeedbackGenerator(style: .medium)
+        haptic.impactOccurred()
+        withAnimation(Motion.easing) {
+            selectedTab = .today
+        }
+        focusRequestID += 1
     }
 
     private func migrateLegacyInboxTasksIfNeeded() {
