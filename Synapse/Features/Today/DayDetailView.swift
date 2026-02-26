@@ -546,7 +546,7 @@ struct MonthYearPickerSheet: View {
 
                     Picker("Year", selection: $selectedYear) {
                         ForEach(minYear...maxYear, id: \.self) { year in
-                            Text("\(year)").tag(year)
+                            Text(verbatim: String(year)).tag(year)
                         }
                     }
                     .pickerStyle(.wheel)
