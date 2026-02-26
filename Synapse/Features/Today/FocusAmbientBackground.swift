@@ -13,18 +13,18 @@ struct FocusAmbientBackground: View {
         let tokens = theme.tokens
         let clampedIntensity = min(1, max(0, intensity))
         let scaleRange: ClosedRange<Double> = isPaused
-            ? (1.0...1.06)
+            ? (1.0...1.03)
             : (
                 isRunning
-                ? (1.0...1.08)
-                : (Double(tokens.breathingScaleRange.lowerBound)...Double(tokens.breathingScaleRange.upperBound))
+                ? (1.0...1.05)
+                : (1.0...1.06)
             )
         let opacityRange: ClosedRange<Double> = isPaused
-            ? (0.05...0.10)
+            ? (0.035...0.08)
             : (
                 isRunning
-                ? (0.08...0.16)
-                : tokens.breathingOpacityRange
+                ? (0.045...0.10)
+                : (0.05...0.12)
             )
         let driftX = reduceMotion ? 0 : (isBreathing ? 12.0 : -12.0)
         let driftY = reduceMotion ? 0 : (isBreathing ? -10.0 : 10.0)
@@ -128,7 +128,7 @@ struct FocusAmbientBackground: View {
             return
         }
 
-        let cycle = isPaused ? 14.0 : (isRunning ? 8.0 : 9.0)
+        let cycle = isPaused ? 14.0 : 8.0
         withAnimation(.easeInOut(duration: cycle).repeatForever(autoreverses: true)) {
             isBreathing = true
         }

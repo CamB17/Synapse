@@ -11,6 +11,7 @@ struct FocusFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     @Query(
         filter: #Predicate<FocusSession> { $0.endDate == nil },
@@ -25,6 +26,7 @@ struct FocusFlowView: View {
     @StateObject private var focus = FocusSessionController()
     @State private var showingTargetPicker = false
     @State private var showingThemePicker = false
+    @State private var showingTuneInSheet = false
     @State private var showingEndConfirmation = false
 
     @State private var displayPhase: FocusScreenState = .setup
@@ -54,6 +56,8 @@ struct FocusFlowView: View {
     @State private var showingCompletionOverlay = false
     @State private var completionAutoDismissTask: Task<Void, Never>?
 
+    @StateObject private var soundscapePlayer = FocusSoundscapePlayer()
+
     @Namespace private var timeNamespace
 
     @AppStorage("focus_theme") private var focusThemeRaw: String = FocusBackgroundTheme.clean.rawValue
@@ -61,6 +65,9 @@ struct FocusFlowView: View {
     @AppStorage("did_set_initial_focus_duration") private var didSetInitialFocusDuration = false
     @AppStorage("focus_last_duration") private var focusLastDuration = 15
     @AppStorage("focus_has_saved_duration") private var hasSavedFocusDuration = false
+    @AppStorage("focus_soundscape") private var focusSoundscapeRaw: String = FocusSoundscape.none.rawValue
+    @AppStorage("focus_music_autoplay") private var focusMusicAutoplay = true
+    @AppStorage("focus_music_volume") private var focusMusicVolumeRaw: String = FocusSoundVolumeLevel.medium.rawValue
 
     private var latestActiveSession: FocusSession? {
         activeSessions.first
@@ -90,7 +97,7 @@ struct FocusFlowView: View {
            let selectedTask = tasks.first(where: { $0.id == selectedTaskID }) {
             return selectedTask.title
         }
-        return "Manual"
+        return "None"
     }
 
     private var runningFocusTitle: String {
@@ -98,16 +105,35 @@ struct FocusFlowView: View {
            let selectedTask = tasks.first(where: { $0.id == selectedTaskID }) {
             return selectedTask.title
         }
-        return "Manual"
+        return "Just focusing"
     }
 
     private var setupTimeTitle: String {
-        if focus.targetMinutes == 0 { return "∞" }
-        return "\(focus.targetMinutes)"
+        if focus.targetMinutes == 0 { return "No timer" }
+        return String(format: "%02d:00", focus.targetMinutes)
     }
 
     private var setupTimeCaption: String {
-        focus.targetMinutes == 0 ? "open" : "min"
+        focus.targetMinutes == 0 ? "Open-ended" : "min"
+    }
+
+    private var selectedSoundscape: FocusSoundscape {
+        FocusSoundscape(rawValue: focusSoundscapeRaw) ?? .none
+    }
+
+    private var selectedVolumeLevel: FocusSoundVolumeLevel {
+        FocusSoundVolumeLevel(rawValue: focusMusicVolumeRaw) ?? .medium
+    }
+
+    private var tuneInSubtitle: String {
+        if selectedSoundscape == .none {
+            return "Off"
+        }
+        return selectedSoundscape.displayName
+    }
+
+    private var isTuneInEnabled: Bool {
+        selectedSoundscape != .none
     }
 
     private func runningAccessibilityValue(at now: Date) -> String {
@@ -186,6 +212,8 @@ struct FocusFlowView: View {
                     if displayPhase == .setup {
                         FocusSetupView(
                             targetTitle: setupTargetTitle,
+                            tuneInSubtitle: tuneInSubtitle,
+                            tuneInEnabled: isTuneInEnabled,
                             targetMinutes: $focus.targetMinutes,
                             timeTitle: setupTimeTitle,
                             timeCaption: setupTimeCaption,
@@ -216,6 +244,10 @@ struct FocusFlowView: View {
                             },
                             onTargetTap: {
                                 showingTargetPicker = true
+                            },
+                            onTuneInTap: {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                showingTuneInSheet = true
                             },
                             onStartTap: {
                                 startFocusTransition()
@@ -248,6 +280,7 @@ struct FocusFlowView: View {
                                 onPauseTap: {
                                     guard focus.phase != .paused else { return }
                                     focus.pause()
+                                    soundscapePlayer.pause()
                                     UIImpactFeedbackGenerator(style: .soft).impactOccurred()
                                     pauseResumeBlinkToken &+= 1
                                     registerRunningInteraction()
@@ -255,6 +288,7 @@ struct FocusFlowView: View {
                                 onResumeTap: {
                                     guard focus.phase == .paused else { return }
                                     focus.resume()
+                                    refreshSoundscapePlaybackForCurrentState()
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                     pauseResumeBlinkToken &+= 1
                                     registerRunningInteraction()
@@ -293,6 +327,7 @@ struct FocusFlowView: View {
                         if minutes > 0 {
                             onSessionLogged(minutes)
                         }
+                        soundscapePlayer.stop()
                         dismiss()
                     }
                 )
@@ -340,6 +375,15 @@ struct FocusFlowView: View {
             focusLastDuration = min(60, max(0, minutes))
             hasSavedFocusDuration = true
         }
+        .onChange(of: focusSoundscapeRaw) { _, _ in
+            refreshSoundscapePlaybackForCurrentState()
+        }
+        .onChange(of: focusMusicAutoplay) { _, _ in
+            refreshSoundscapePlaybackForCurrentState()
+        }
+        .onChange(of: focusMusicVolumeRaw) { _, _ in
+            soundscapePlayer.setVolume(selectedVolumeLevel)
+        }
         .onChange(of: focus.lastCompletedSessionMinutes) { _, minutes in
             guard let minutes else { return }
             handleCompletion(minutes: minutes)
@@ -349,12 +393,28 @@ struct FocusFlowView: View {
             idleMonitorTask = nil
             completionAutoDismissTask?.cancel()
             completionAutoDismissTask = nil
+            soundscapePlayer.stop()
             focus.handleViewDisappear()
         }
         .sheet(isPresented: $showingThemePicker) {
             FocusThemePickerSheet(selectedTheme: themeBinding)
                 .presentationDetents([.fraction(0.48), .medium])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingTuneInSheet) {
+            FocusTuneInSheet(
+                selectedSoundscape: Binding(
+                    get: { selectedSoundscape },
+                    set: { focusSoundscapeRaw = $0.rawValue }
+                ),
+                autoplay: $focusMusicAutoplay,
+                selectedVolume: Binding(
+                    get: { selectedVolumeLevel },
+                    set: { focusMusicVolumeRaw = $0.rawValue }
+                )
+            )
+            .presentationDetents([.fraction(0.50), .medium])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingTargetPicker) {
             FocusTargetPickerView(
@@ -372,6 +432,10 @@ struct FocusFlowView: View {
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase != .active else { return }
+            soundscapePlayer.stop()
         }
     }
 
@@ -433,12 +497,12 @@ struct FocusFlowView: View {
             } else {
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    showingThemePicker = true
+                    showingTuneInSheet = true
                     registerRunningInteraction()
                 } label: {
-                    Image(systemName: "paintpalette")
+                    Image(systemName: soundscapePlayer.isPlaying ? "music.note" : "music.note.slash")
                         .font(Theme.Typography.iconCompact)
-                        .foregroundStyle(tokens.textPrimary.opacity(0.84))
+                        .foregroundStyle(soundscapePlayer.isPlaying ? Theme.accent : tokens.textSecondary)
                         .frame(width: 36, height: 36)
                         .background(
                             Circle()
@@ -450,7 +514,7 @@ struct FocusFlowView: View {
                         }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Select background theme")
+                .accessibilityLabel("Tune in")
             }
         }
     }
@@ -515,6 +579,12 @@ struct FocusFlowView: View {
                 return
             }
 
+            if focusMusicAutoplay {
+                soundscapePlayer.play(soundscape: selectedSoundscape, volume: selectedVolumeLevel)
+            } else {
+                soundscapePlayer.stop()
+            }
+
             runningTimeOpacity = 0
             runningTimeScale = 0.98
             runningControlsIntroOpacity = 0
@@ -571,6 +641,7 @@ struct FocusFlowView: View {
             withAnimation(FocusAnim.easedMed(reduceMotion: reduceMotion)) {
                 displayPhase = .setup
             }
+            soundscapePlayer.stop()
             resetSetupVisualState()
             runningControlsIntroOpacity = 1
             runningProgressIntroOpacity = 1
@@ -596,6 +667,7 @@ struct FocusFlowView: View {
             withAnimation(FocusAnim.easedMed(reduceMotion: reduceMotion)) {
                 displayPhase = .paused
             }
+            soundscapePlayer.pause()
             registerRunningInteraction()
         }
     }
@@ -635,6 +707,7 @@ struct FocusFlowView: View {
             showingCompletionOverlay = false
         }
 
+        soundscapePlayer.stop()
         focus.clearCompletedSessionMarker()
         frozenRunningTime = nil
         completionGlowOpacity = 0.06
@@ -709,6 +782,37 @@ struct FocusFlowView: View {
             focus.selectTask(taskID)
         }
     }
+
+    private func refreshSoundscapePlaybackForCurrentState() {
+        guard isRunningPresentation else {
+            soundscapePlayer.stop()
+            return
+        }
+
+        guard focusMusicAutoplay else {
+            soundscapePlayer.stop()
+            return
+        }
+
+        if focus.phase == .paused {
+            if soundscapePlayer.activeSoundscape != selectedSoundscape {
+                soundscapePlayer.play(soundscape: selectedSoundscape, volume: selectedVolumeLevel)
+            } else {
+                soundscapePlayer.setVolume(selectedVolumeLevel)
+            }
+            soundscapePlayer.pause()
+            return
+        }
+
+        if soundscapePlayer.activeSoundscape == selectedSoundscape, selectedSoundscape != .none {
+            soundscapePlayer.setVolume(selectedVolumeLevel)
+            if !soundscapePlayer.isPlaying {
+                soundscapePlayer.resume()
+            }
+        } else {
+            soundscapePlayer.play(soundscape: selectedSoundscape, volume: selectedVolumeLevel)
+        }
+    }
 }
 
 struct FocusSetupView: View {
@@ -719,6 +823,8 @@ struct FocusSetupView: View {
     @State private var dialVisible = false
 
     let targetTitle: String
+    let tuneInSubtitle: String
+    let tuneInEnabled: Bool
     @Binding var targetMinutes: Int
     let timeTitle: String
     let timeCaption: String
@@ -743,6 +849,7 @@ struct FocusSetupView: View {
 
     let onDialDragChanged: (Bool) -> Void
     let onTargetTap: () -> Void
+    let onTuneInTap: () -> Void
     let onStartTap: () -> Void
 
     var body: some View {
@@ -750,35 +857,89 @@ struct FocusSetupView: View {
         let effectiveDialScale = dialScale * (dialVisible ? 1 : 0.985)
 
         VStack(spacing: Theme.Spacing.md) {
-            Text("Duration")
-                .font(.system(size: 42, weight: .semibold, design: .rounded))
-                .foregroundStyle(textPrimary)
-                .opacity(headerVisible ? 1 : 0)
-                .offset(y: headerVisible ? 0 : 8)
+            VStack(spacing: Theme.Spacing.xxxs) {
+                Text("Choose one thing.")
+                    .font(.system(size: 52, weight: .semibold, design: .serif))
+                    .foregroundStyle(textPrimary)
+                    .multilineTextAlignment(.center)
 
-            Button(action: onTargetTap) {
-                HStack(spacing: Theme.Spacing.xxxs) {
-                    Text(targetTitle)
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(textPrimary)
-                        .lineLimit(1)
-
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(textSecondary.opacity(0.9))
-                }
-                .padding(.horizontal, Theme.Spacing.xs)
-                .padding(.vertical, Theme.Spacing.xxxs)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(controlSurface)
-                )
-                .overlay {
-                    Capsule(style: .continuous)
-                        .stroke(controlStroke, lineWidth: 0.8)
-                }
+                Text("Or just set a timer.")
+                    .font(.system(size: 18, weight: .regular, design: .rounded))
+                    .foregroundStyle(textSecondary)
             }
-            .buttonStyle(.plain)
+            .opacity(headerVisible ? 1 : 0)
+            .offset(y: headerVisible ? 0 : 8)
+            .padding(.top, Theme.Spacing.xs)
+
+            VStack(spacing: Theme.Spacing.xs) {
+                Button(action: onTuneInTap) {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 21, weight: .semibold))
+                            .foregroundStyle(textSecondary)
+
+                        Text("Tune in")
+                            .font(Theme.Typography.bodySmall)
+                            .foregroundStyle(textPrimary.opacity(0.95))
+
+                        if tuneInEnabled {
+                            Circle()
+                                .fill(Theme.accent)
+                                .frame(width: 7, height: 7)
+                            Text(tuneInSubtitle)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(textSecondary)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(textSecondary.opacity(0.9))
+                    }
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, Theme.Spacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                            .fill(controlSurface)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                            .stroke(controlStroke, lineWidth: 0.8)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onTargetTap) {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Text("Focusing on")
+                            .font(Theme.Typography.bodySmall)
+                            .foregroundStyle(textSecondary)
+
+                        Text(targetTitle)
+                            .font(Theme.Typography.bodySmallStrong)
+                            .foregroundStyle(textPrimary)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 0)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(textSecondary.opacity(0.9))
+                    }
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, Theme.Spacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                            .fill(controlSurface)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
+                            .stroke(controlStroke, lineWidth: 0.8)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
             .opacity(headerVisible ? 1 : 0)
 
             ZStack {
@@ -815,6 +976,12 @@ struct FocusSetupView: View {
                     ? "No timer selected"
                     : "\(targetMinutes) minutes selected"
                 )
+            }
+            .overlay(alignment: .topLeading) {
+                Text("Focus")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(textSecondary)
+                    .offset(y: -12)
             }
             .frame(height: 360)
             .opacity(effectiveDialOpacity)
@@ -930,27 +1097,15 @@ struct FocusRunningView: View {
 
             Spacer(minLength: 36)
 
-            HStack(spacing: Theme.Spacing.sm) {
-                FocusTransportButton(
-                    icon: "pause.fill",
-                    isActive: !isPaused,
-                    fill: !isPaused ? Theme.accent : controlSurface,
-                    stroke: controlStroke,
-                    foreground: !isPaused ? .white : textPrimary.opacity(0.88),
-                    action: onPauseTap
-                )
-                .opacity(pauseControlOpacity)
-
-                FocusTransportButton(
-                    icon: "play.fill",
-                    isActive: isPaused,
-                    fill: isPaused ? Theme.accent : controlSurface,
-                    stroke: controlStroke,
-                    foreground: isPaused ? .white : textPrimary.opacity(0.88),
-                    action: onResumeTap
-                )
-                .opacity(pauseControlOpacity)
-            }
+            FocusPlaybackControl(
+                isPaused: isPaused,
+                pauseAction: onPauseTap,
+                resumeAction: onResumeTap,
+                textPrimary: textPrimary,
+                controlSurface: controlSurface,
+                controlStroke: controlStroke
+            )
+            .opacity(pauseControlOpacity)
 
             Spacer(minLength: 0)
 
@@ -992,36 +1147,60 @@ struct FocusRunningView: View {
     }
 }
 
-private struct FocusTransportButton: View {
-    let icon: String
-    let isActive: Bool
-    let fill: Color
-    let stroke: Color
-    let foreground: Color
-    let action: () -> Void
+private struct FocusPlaybackControl: View {
+    let isPaused: Bool
+    let pauseAction: () -> Void
+    let resumeAction: () -> Void
+    let textPrimary: Color
+    let controlSurface: Color
+    let controlStroke: Color
 
     var body: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            button(
+                icon: "pause.fill",
+                active: !isPaused,
+                action: pauseAction,
+                label: "Pause focus"
+            )
+
+            button(
+                icon: "play.fill",
+                active: isPaused,
+                action: resumeAction,
+                label: "Resume focus"
+            )
+        }
+        .padding(.horizontal, Theme.Spacing.sm)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(
+            Capsule(style: .continuous)
+                .fill(controlSurface.opacity(0.92))
+        )
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke(controlStroke.opacity(0.9), lineWidth: 0.9)
+        }
+        .frame(width: 290)
+    }
+
+    private func button(icon: String, active: Bool, action: @escaping () -> Void, label: String) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 21, weight: .semibold))
-                .foregroundStyle(foreground)
-                .frame(width: 76, height: 76)
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(active ? Color.white : textPrimary.opacity(0.90))
+                .frame(width: 64, height: 64)
                 .background(
                     Circle()
-                        .fill(fill)
+                        .fill(active ? Theme.accent : Color.clear)
                 )
                 .overlay {
                     Circle()
-                        .stroke(stroke.opacity(isActive ? 0.34 : 0.85), lineWidth: 1)
+                        .stroke(controlStroke.opacity(active ? 0.18 : 0.65), lineWidth: 0.8)
                 }
-                .shadow(
-                    color: Theme.cardShadow().opacity(isActive ? 0.28 : 0.14),
-                    radius: isActive ? 10 : 4,
-                    y: isActive ? 6 : 2
-                )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(icon.contains("pause") ? "Pause focus" : "Resume focus")
+        .accessibilityLabel(label)
     }
 }
 
@@ -1067,6 +1246,67 @@ struct FocusThemePickerSheet: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Background")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct FocusTuneInSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @Binding var selectedSoundscape: FocusSoundscape
+    @Binding var autoplay: Bool
+    @Binding var selectedVolume: FocusSoundVolumeLevel
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Soundscape") {
+                    ForEach(FocusSoundscape.allCases) { soundscape in
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            selectedSoundscape = soundscape
+                        } label: {
+                            HStack(spacing: Theme.Spacing.sm) {
+                                Text(soundscape.displayName)
+                                    .font(Theme.Typography.bodySmall)
+                                    .foregroundStyle(Theme.text)
+
+                                Spacer(minLength: 0)
+
+                                if selectedSoundscape == soundscape {
+                                    Image(systemName: "checkmark")
+                                        .font(Theme.Typography.caption.weight(.semibold))
+                                        .foregroundStyle(Theme.accent)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Section("Playback") {
+                    Toggle("Autoplay music", isOn: $autoplay)
+
+                    Picker("Volume", selection: $selectedVolume) {
+                        ForEach(FocusSoundVolumeLevel.allCases) { level in
+                            Text(level.displayName)
+                                .tag(level)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Tune in")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1132,11 +1372,11 @@ private struct FocusEndConfirmationOverlay: View {
                 .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                Text("End focus?")
+                Text("End session?")
                     .font(Theme.Typography.titleMedium)
                     .foregroundStyle(textPrimary)
 
-                Text(message)
+                Text("You can start again anytime.")
                     .font(Theme.Typography.bodySmall)
                     .foregroundStyle(textSecondary)
 
@@ -1318,7 +1558,7 @@ struct FocusTargetPickerView: View {
         NavigationStack {
             List {
                 Section {
-                    pickerRow(title: "Manual", selection: .none)
+                    pickerRow(title: "None", selection: .none)
                 }
                 Section("Tasks") {
                     if sortedTasks.isEmpty {
