@@ -221,33 +221,15 @@ struct ReviewView: View {
     }
 
     private var dailyCompletedTasks: [TaskItem] {
-        tasks
-            .filter { task in
-                task.state == .completed && calendar.isDate(completionDay(for: task), inSameDayAs: selectedDayStart)
-            }
-            .sorted { lhs, rhs in
-                (lhs.completedAt ?? lhs.createdAt) > (rhs.completedAt ?? rhs.createdAt)
-            }
+        completedTasks(on: selectedDayStart)
     }
 
     private var dailyScheduledTasks: [TaskItem] {
-        tasks
-            .filter { task in
-                assignmentDay(for: task) == selectedDayStart && task.state != .inbox
-            }
-            .sorted { lhs, rhs in
-                if lhs.priority.sortRank != rhs.priority.sortRank {
-                    return lhs.priority.sortRank < rhs.priority.sortRank
-                }
-                return lhs.createdAt < rhs.createdAt
-            }
+        scheduledTasks(on: selectedDayStart)
     }
 
     private var dailySessions: [FocusSession] {
-        let end = calendar.date(byAdding: .day, value: 1, to: selectedDayStart) ?? .distantFuture
-        return sessions
-            .filter { $0.startDate >= selectedDayStart && $0.startDate < end }
-            .sorted { $0.startDate > $1.startDate }
+        focusSessions(on: selectedDayStart)
     }
 
     private var dailyFocusSeconds: Int {
@@ -264,13 +246,21 @@ struct ReviewView: View {
         return Int(avg.rounded())
     }
 
-    private var dailyFocusMinutesByBucket: [TimeBucket: Int] {
+    private var dailyFocusMinutesByTimeBucket: [TimeBucket: Int] {
         var output: [TimeBucket: Int] = Dictionary(uniqueKeysWithValues: TimeBucket.allCases.map { ($0, 0) })
         for session in dailySessions {
             let bucket = timeBucket(for: session.startDate)
             output[bucket, default: 0] += max(0, session.loggedSeconds / 60)
         }
         return output
+    }
+
+    private var dailyFocusMinutesByBucket: (morning: Int, afternoon: Int, evening: Int) {
+        (
+            morning: dailyFocusMinutesByTimeBucket[.morning, default: 0],
+            afternoon: dailyFocusMinutesByTimeBucket[.afternoon, default: 0],
+            evening: dailyFocusMinutesByTimeBucket[.evening, default: 0]
+        )
     }
 
     private var dailyHabitCompletionsByBucket: [TimeBucket: Int] {
@@ -284,7 +274,7 @@ struct ReviewView: View {
 
     private var dailySecondaryInsight: DailyInsight? {
         if let focusBucket = meaningfulLeadingBucket(
-            from: dailyFocusMinutesByBucket,
+            from: dailyFocusMinutesByTimeBucket,
             minimumTotal: dailyFocusSomeMinutes
         ) {
             return DailyInsight(title: "Peak focus window", value: focusBucket.label)
@@ -523,6 +513,40 @@ struct ReviewView: View {
         return Double(monthlyCompletedTasks.count) / Double(selectedMonthSessions.count)
     }
 
+    private var dailyPerfectDayAchieved: Bool {
+        guard selectedDayRelation != .future else { return false }
+        return isPerfectDay(on: selectedDayStart)
+    }
+
+    private var monthlyEvaluationDays: [Date] {
+        guard let evaluationEnd = selectedMonthDataRange.evaluationEndDay else { return [] }
+        return selectedMonthDays.filter { $0 <= evaluationEnd }
+    }
+
+    private var monthlyPerfectDaysCount: Int {
+        monthlyEvaluationDays.filter { isPerfectDay(on: $0) }.count
+    }
+
+    private var monthlyDaysWithAnyHabitCompletion: Int {
+        monthlyEvaluationDays.filter { habitSummary(for: $0).completed > 0 }.count
+    }
+
+    private var monthlyMilestones: [String] {
+        var items: [String] = []
+
+        if selectedMonthSessions.count >= 10 {
+            items.append("10 focus sessions")
+        }
+        if monthlyPerfectDaysCount >= 5 {
+            items.append("5 perfect days")
+        }
+        if monthlyDaysWithAnyHabitCompletion >= 7 {
+            items.append("7 days with 1+ habit complete")
+        }
+
+        return items
+    }
+
     private var habitStats: [HabitMonthStats] {
         habits.map { habit in
             stats(for: habit, monthStart: selectedMonthStart)
@@ -591,7 +615,7 @@ struct ReviewView: View {
 
     var body: some View {
         NavigationStack {
-            ScreenCanvas {
+            ScreenCanvas(showsTopDepthGradient: false) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                         modePicker
@@ -673,6 +697,8 @@ struct ReviewView: View {
     private var dailyReview: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             dailyDateSelector
+            dailyScoreboard
+            dailyHeroChart
             dailyHabitCard
             dailyProductivityCard
             dailyInsightsCard
@@ -724,6 +750,48 @@ struct ReviewView: View {
         }
         .padding(Theme.Spacing.sm)
         .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
+    }
+
+    private var dailyScoreboard: some View {
+        let tasksLabel = "\(dailyCompletedTasks.count)/\(dailyScheduledTasks.count)"
+        let focusLabel = selectedDayRelation == .future ? "—" : formatMinutesLabel(fromMinutes: dailyFocusMinutes)
+        let perfectDayLabel: String = {
+            guard selectedDayRelation != .future else { return "—" }
+            return dailyPerfectDayAchieved ? "Achieved" : "—"
+        }()
+
+        return ReviewScoreboard(
+            tiles: [
+                ReviewScoreboard.Tile(
+                    title: "Habits",
+                    value: dailyHabitCompletionLabel,
+                    subtitle: selectedDayRelation == .future ? "Upcoming" : nil
+                ),
+                ReviewScoreboard.Tile(
+                    title: "Tasks",
+                    value: tasksLabel,
+                    subtitle: "Finished / scheduled"
+                ),
+                ReviewScoreboard.Tile(
+                    title: "Focus",
+                    value: focusLabel,
+                    subtitle: selectedDayRelation == .future ? "Not started" : "\(dailySessions.count) sessions"
+                ),
+                ReviewScoreboard.Tile(
+                    title: "Perfect day",
+                    value: perfectDayLabel,
+                    subtitle: nil
+                )
+            ]
+        )
+    }
+
+    private var dailyHeroChart: some View {
+        TimeOfDayBarChart(
+            morning: dailyFocusMinutesByBucket.morning,
+            afternoon: dailyFocusMinutesByBucket.afternoon,
+            evening: dailyFocusMinutesByBucket.evening
+        )
     }
 
     private var dailyHabitCard: some View {
@@ -937,7 +1005,9 @@ struct ReviewView: View {
     private var monthlyReview: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             monthlyHeader
-            monthlyOverviewCard
+            monthlyScoreboard
+            monthlyHeroChart
+            monthlyHighlightsRow
             monthlyMomentumCard
             monthlyPatternsCard
             monthlyHabitsCard
@@ -945,6 +1015,7 @@ struct ReviewView: View {
             monthlyScheduledTasksCard
             monthlyCorrelationsCard
             monthlyNarrativeCard
+            monthlyMilestonesCard
         }
     }
 
@@ -1001,20 +1072,73 @@ struct ReviewView: View {
         .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
     }
 
-    private var monthlyOverviewCard: some View {
+    private var monthlyScoreboard: some View {
+        let focusLabel = monthlyFocusMinutes > 0 ? formatMinutesLabel(fromMinutes: monthlyFocusMinutes) : "—"
+        let streakSuffix = selectedMonthMetrics.bestStreak == 1 ? "" : "s"
+
+        return ReviewScoreboard(
+            tiles: [
+                ReviewScoreboard.Tile(
+                    title: "Habits completion",
+                    value: "\(selectedMonthMetrics.consistencyPercent)%",
+                    subtitle: "Best streak \(selectedMonthMetrics.bestStreak) day\(streakSuffix)"
+                ),
+                ReviewScoreboard.Tile(
+                    title: "Tasks finished",
+                    value: "\(monthlyCompletedTasks.count)",
+                    subtitle: nil
+                ),
+                ReviewScoreboard.Tile(
+                    title: "Focus time",
+                    value: focusLabel,
+                    subtitle: selectedMonthSessions.isEmpty ? "No sessions" : "\(selectedMonthSessions.count) sessions"
+                ),
+                ReviewScoreboard.Tile(
+                    title: "Perfect days",
+                    value: "\(monthlyPerfectDaysCount)",
+                    subtitle: nil
+                )
+            ]
+        )
+    }
+
+    private var monthlyHeroChart: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Monthly Overview")
+            Text("Month rhythm")
+                .font(Theme.Typography.screenTitle)
+                .foregroundStyle(Theme.text)
+            Text("Habit completion heatmap")
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.textSecondary)
-
             monthHeatmap
-
-            featuredMetricRow(label: "Days fully complete", value: "\(selectedMonthMetrics.fullDays)")
-            metricRow(label: "Days partially complete", value: "\(selectedMonthMetrics.partialDays)")
-            metricRow(label: "Best streak", value: "\(selectedMonthMetrics.bestStreak) day\(selectedMonthMetrics.bestStreak == 1 ? "" : "s")")
         }
         .padding(Theme.Spacing.cardInset)
-        .surfaceCard()
+        .surfaceCard(style: .primary, cornerRadius: Theme.radiusSmall)
+    }
+
+    private var monthlyHighlightsRow: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            highlightMetric(label: "Full days", value: "\(selectedMonthMetrics.fullDays)")
+            highlightMetric(label: "Partial days", value: "\(selectedMonthMetrics.partialDays)")
+            highlightMetric(
+                label: "Best streak",
+                value: "\(selectedMonthMetrics.bestStreak)d"
+            )
+        }
+        .padding(.horizontal, Theme.Spacing.xs)
+    }
+
+    private func highlightMetric(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+            Text(label)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.textSecondary)
+            Text(value)
+                .font(Theme.Typography.bodySmallStrong)
+                .monospacedDigit()
+                .foregroundStyle(Theme.text)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var monthlyMomentumCard: some View {
@@ -1484,9 +1608,40 @@ struct ReviewView: View {
             Text(monthlyNarrativeLine)
                 .font(Theme.Typography.bodySmallStrong)
                 .foregroundStyle(Theme.text)
+
+            Text("Perfect days: \(monthlyPerfectDaysCount)")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.textSecondary.opacity(0.86))
         }
         .padding(Theme.Spacing.cardInset)
         .surfaceCard(style: .accentTint, cornerRadius: Theme.radiusSmall)
+    }
+
+    private var monthlyMilestonesCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("Milestones")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.textSecondary)
+
+            if monthlyMilestones.isEmpty {
+                Text("No milestones yet this month.")
+                    .font(Theme.Typography.bodySmall)
+                    .foregroundStyle(Theme.textSecondary)
+            } else {
+                ForEach(monthlyMilestones, id: \.self) { milestone in
+                    HStack(spacing: Theme.Spacing.xxs) {
+                        Image(systemName: "sparkle")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.accent.opacity(0.8))
+                        Text(milestone)
+                            .font(Theme.Typography.bodySmallStrong)
+                            .foregroundStyle(Theme.text)
+                    }
+                }
+            }
+        }
+        .padding(Theme.Spacing.cardInset)
+        .surfaceCard(style: .secondary, cornerRadius: Theme.radiusSmall)
     }
 
     private func metricRow(label: String, value: String, valueColor: Color = Theme.text) -> some View {
@@ -1499,6 +1654,7 @@ struct ReviewView: View {
 
             Text(value)
                 .font(Theme.Typography.bodySmallStrong)
+                .monospacedDigit()
                 .foregroundStyle(valueColor)
                 .contentTransition(.numericText())
         }
@@ -1514,6 +1670,7 @@ struct ReviewView: View {
 
             Text(value)
                 .font(Theme.Typography.itemTitleProminent)
+                .monospacedDigit()
                 .foregroundStyle(Theme.text)
                 .contentTransition(.numericText())
         }
@@ -1867,6 +2024,58 @@ struct ReviewView: View {
             lowFocusRatePercent: fullRate(for: lowDays),
             highFocusDays: highDays.count,
             lowFocusDays: lowDays.count
+        )
+    }
+
+    private func scheduledTasks(on day: Date) -> [TaskItem] {
+        tasks
+            .filter { task in
+                assignmentDay(for: task) == day && task.state != .inbox
+            }
+            .sorted { lhs, rhs in
+                if lhs.priority.sortRank != rhs.priority.sortRank {
+                    return lhs.priority.sortRank < rhs.priority.sortRank
+                }
+                return lhs.createdAt < rhs.createdAt
+            }
+    }
+
+    private func completedTasks(on day: Date) -> [TaskItem] {
+        tasks
+            .filter { task in
+                task.state == .completed && calendar.isDate(completionDay(for: task), inSameDayAs: day)
+            }
+            .sorted { lhs, rhs in
+                (lhs.completedAt ?? lhs.createdAt) > (rhs.completedAt ?? rhs.createdAt)
+            }
+    }
+
+    private func focusSessions(on day: Date) -> [FocusSession] {
+        let end = calendar.date(byAdding: .day, value: 1, to: day) ?? .distantFuture
+        return sessions
+            .filter { $0.startDate >= day && $0.startDate < end }
+            .sorted { $0.startDate > $1.startDate }
+    }
+
+    private func focusMinutes(on day: Date) -> Int {
+        focusSessions(on: day).reduce(0) { $0 + max(0, $1.loggedSeconds / 60) }
+    }
+
+    private func isPerfectDay(on day: Date) -> Bool {
+        let normalizedDay = calendar.startOfDay(for: day)
+        let summary = habitSummary(for: normalizedDay)
+        let scheduled = scheduledTasks(on: normalizedDay).count
+        let completed = completedTasks(on: normalizedDay).count
+        let sessionCount = focusSessions(on: normalizedDay).count
+        let minutes = focusMinutes(on: normalizedDay)
+
+        return AchievementEngine.isPerfectDay(
+            habitTotal: summary.total,
+            habitCompleted: summary.completed,
+            scheduledTasks: scheduled,
+            completedTasks: completed,
+            focusSessionCount: sessionCount,
+            focusMinutes: minutes
         )
     }
 

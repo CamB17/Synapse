@@ -7,6 +7,10 @@ struct SynapseApp: App {
     @StateObject private var session = AppSession()
 
     init() {
+        #if DEBUG
+        FontDebug.logSatoshiAvailability()
+        #endif
+
         let schema = Schema([
             TaskItem.self,
             FocusSession.self,
