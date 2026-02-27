@@ -16,6 +16,10 @@ private struct SurfaceCardModifier: ViewModifier {
                 backgroundColor,
                 in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            }
             .shadow(color: shadowColor, radius: shadowRadius, y: shadowY)
     }
 
@@ -26,7 +30,7 @@ private struct SurfaceCardModifier: ViewModifier {
         case .secondary:
             return Theme.surface2
         case .accentTint:
-            return Theme.accent.opacity(0.06)
+            return Theme.accent.opacity(0.07)
         }
     }
 
@@ -35,31 +39,42 @@ private struct SurfaceCardModifier: ViewModifier {
         case .primary:
             return Theme.cardShadow()
         case .secondary:
-            return Theme.cardShadow().opacity(0.45)
+            return Theme.cardShadow().opacity(0.8)
         case .accentTint:
-            return Theme.cardShadow()
+            return Theme.cardShadow().opacity(0.9)
         }
     }
 
     private var shadowRadius: CGFloat {
         switch style {
         case .primary:
-            return Theme.shadowRadius
+            return 4
         case .secondary:
-            return 6
+            return 2.5
         case .accentTint:
-            return Theme.shadowRadius
+            return 3
         }
     }
 
     private var shadowY: CGFloat {
         switch style {
         case .primary:
-            return Theme.shadowY
+            return 1.5
         case .secondary:
-            return 3
+            return 1
         case .accentTint:
-            return Theme.shadowY
+            return 1.5
+        }
+    }
+
+    private var borderColor: Color {
+        switch style {
+        case .primary:
+            return Theme.text.opacity(0.08)
+        case .secondary:
+            return Theme.text.opacity(0.07)
+        case .accentTint:
+            return Theme.accent.opacity(0.26)
         }
     }
 }

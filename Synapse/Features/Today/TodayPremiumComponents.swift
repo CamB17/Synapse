@@ -5,12 +5,12 @@ enum TodayPremiumTokens {
     static let pageHorizontalPadding: CGFloat = 22
     static let pageTopPadding: CGFloat = 14
     static let pageBottomPadding: CGFloat = 120
-    static let sectionSpacing: CGFloat = 22
+    static let sectionSpacing: CGFloat = 16
 
     static let cardCornerRadius: CGFloat = 26
     static let tileCornerRadius: CGFloat = 18
     static let chipCornerRadius: CGFloat = 999
-    static let cardPadding: CGFloat = 18
+    static let cardPadding: CGFloat = 16
     static let innerRowSpacing: CGFloat = 12
     static let chipHeight: CGFloat = 39
     static let minTapHeight: CGFloat = 44
@@ -29,57 +29,24 @@ private enum TodayHaptics {
 
 struct PremiumGlassCard: ViewModifier {
     var cornerRadius: CGFloat = TodayPremiumTokens.cardCornerRadius
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breathingShadow = false
+    var shadowStrength: CGFloat = 1
 
     func body(content: Content) -> some View {
-        let shadowOpacity = reduceMotion ? 0.05 : (breathingShadow ? 0.06 : 0.04)
+        let shadowOpacity = 0.05 * shadowStrength
 
         content
-            .background(.ultraThinMaterial)
-            .background(Theme.surface.opacity(0.75))
+            .background(Theme.surface.opacity(0.97))
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                    .stroke(Theme.text.opacity(0.08), lineWidth: 1)
             }
-            .overlay(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.24),
-                                Color.white.opacity(0.08),
-                                Color.clear
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .opacity(0.52)
-                    .allowsHitTesting(false)
-            }
-            .shadow(color: Color.black.opacity(shadowOpacity), radius: 18, x: 0, y: 10)
-            .onAppear {
-                refreshBreathing()
-            }
-            .onChange(of: reduceMotion) { _, _ in
-                refreshBreathing()
-            }
-    }
-
-    private func refreshBreathing() {
-        guard !reduceMotion else {
-            withAnimation(.none) {
-                breathingShadow = false
-            }
-            return
-        }
-
-        withAnimation(.easeInOut(duration: 10).repeatForever(autoreverses: true)) {
-            breathingShadow = true
-        }
+            .shadow(
+                color: Color.black.opacity(shadowOpacity),
+                radius: 4 * shadowStrength,
+                x: 0,
+                y: 1.5 * shadowStrength
+            )
     }
 }
 
@@ -96,8 +63,11 @@ private struct PremiumTileModifier: ViewModifier {
 }
 
 extension View {
-    func premiumGlassCard(cornerRadius: CGFloat = TodayPremiumTokens.cardCornerRadius) -> some View {
-        modifier(PremiumGlassCard(cornerRadius: cornerRadius))
+    func premiumGlassCard(
+        cornerRadius: CGFloat = TodayPremiumTokens.cardCornerRadius,
+        shadowStrength: CGFloat = 1
+    ) -> some View {
+        modifier(PremiumGlassCard(cornerRadius: cornerRadius, shadowStrength: shadowStrength))
     }
 
     // Backwards-compatible alias used by existing Today views.
@@ -291,12 +261,13 @@ struct TodayGreetingHeader: View {
     @State private var driftingGlow = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
-                Text((dayContext ?? "Today").uppercased())
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .kerning(1.1)
+                Text(dayContext ?? "Today")
+                    .font(Theme.Typography.labelCaps)
+                    .tracking(Theme.Typography.labelTracking)
                     .foregroundStyle(Theme.textSecondary.opacity(0.76))
+                    .textCase(.uppercase)
 
                 Circle()
                     .fill(Theme.accent.opacity(0.46))
@@ -304,21 +275,21 @@ struct TodayGreetingHeader: View {
             }
 
             Text(greeting)
-                .font(.system(size: 38, weight: .semibold, design: .serif))
-                .lineSpacing(3)
+                .font(Theme.Typography.heroTitle)
+                .lineSpacing(2)
                 .foregroundStyle(Theme.text)
 
             HStack(spacing: 6) {
                 Text("What's next matters most")
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .font(Theme.Typography.bodyMedium)
                     .foregroundStyle(Theme.textSecondary.opacity(0.88))
 
                 Image(systemName: "sparkle")
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.accent.opacity(0.55))
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(alignment: .topLeading) {
             Ellipse()
@@ -397,77 +368,74 @@ struct TodayCalendarStripCard<MonthContent: View>: View {
     @State private var pulsingDay: Date?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Button {
-                    TodayHaptics.light()
-                    onChooseMonthYear()
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(monthLabel)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Theme.textSecondary)
-
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Theme.textSecondary.opacity(0.8))
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(height: TodayPremiumTokens.minTapHeight)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Theme.surface.opacity(0.7))
-                    )
-                }
-                .buttonStyle(TodayPressableButtonStyle())
-
-                Spacer(minLength: 0)
-
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(spacing: Theme.Spacing.xs) {
                 Button {
                     TodayHaptics.light()
                     onToggleMonth()
                 } label: {
-                    HStack(spacing: 6) {
-                        Text(isMonthExpanded ? "Week" : "Month")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    HStack(spacing: Theme.Spacing.xxxs) {
+                        Text(monthLabel)
+                            .font(Theme.Typography.bodySmallStrong)
                             .foregroundStyle(isMonthExpanded ? Theme.accent : Theme.textSecondary)
-
-                        Image(systemName: isMonthExpanded ? "calendar" : "calendar.badge.clock")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(isMonthExpanded ? Theme.accent : Theme.textSecondary)
+                        Image(systemName: isMonthExpanded ? "chevron.up" : "chevron.down")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(isMonthExpanded ? Theme.accent : Theme.textSecondary.opacity(0.9))
                     }
-                    .padding(.horizontal, 12)
-                    .frame(height: TodayPremiumTokens.minTapHeight)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .frame(height: 30)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(isMonthExpanded ? Theme.accent.opacity(0.14) : Theme.surface.opacity(0.7))
+                            .fill(isMonthExpanded ? Theme.accent.opacity(0.13) : Theme.surface2.opacity(0.72))
                     )
                     .overlay {
                         Capsule(style: .continuous)
                             .stroke(
-                                isMonthExpanded ? Theme.accent.opacity(0.34) : Theme.textSecondary.opacity(0.14),
+                                isMonthExpanded ? Theme.accent.opacity(0.28) : Theme.textSecondary.opacity(0.14),
                                 lineWidth: 1
                             )
                     }
                 }
                 .buttonStyle(TodayPressableButtonStyle())
+
+                if isMonthExpanded {
+                    Button {
+                        TodayHaptics.light()
+                        onChooseMonthYear()
+                    } label: {
+                        Text("Choose month")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .buttonStyle(TodayPressableButtonStyle())
+                }
+
+                Spacer(minLength: 0)
+
+                if showsCurrentMonthShortcut, isMonthExpanded {
+                    textAction(title: "Current month", action: onCurrentMonthTap)
+                }
+
+                if showsBackToToday {
+                    textAction(title: "Back to today", action: onBackToTodayTap)
+                }
             }
 
             if isMonthExpanded {
-                HStack(spacing: 10) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Button {
                         TodayHaptics.light()
                         onPreviousMonth()
                     } label: {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(Theme.Typography.caption.weight(.semibold))
                             .foregroundStyle(
                                 canNavigateToPreviousMonth
                                     ? Theme.textSecondary
-                                    : Theme.textSecondary.opacity(0.42)
+                                    : Theme.textSecondary.opacity(0.45)
                             )
-                            .frame(width: 32, height: 32)
-                            .background(Theme.surface.opacity(0.86), in: Circle())
+                            .frame(width: 30, height: 30)
+                            .background(Theme.surface.opacity(0.78), in: Circle())
                     }
                     .buttonStyle(TodayPressableButtonStyle())
                     .disabled(!canNavigateToPreviousMonth)
@@ -479,7 +447,7 @@ struct TodayCalendarStripCard<MonthContent: View>: View {
                         onChooseMonthYear()
                     } label: {
                         Text(monthLabel)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .font(Theme.Typography.bodySmallStrong)
                             .foregroundStyle(Theme.textSecondary)
                     }
                     .buttonStyle(TodayPressableButtonStyle())
@@ -491,87 +459,58 @@ struct TodayCalendarStripCard<MonthContent: View>: View {
                         onNextMonth()
                     } label: {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(Theme.Typography.caption.weight(.semibold))
                             .foregroundStyle(
                                 canNavigateToNextMonth
                                     ? Theme.textSecondary
-                                    : Theme.textSecondary.opacity(0.42)
+                                    : Theme.textSecondary.opacity(0.45)
                             )
-                            .frame(width: 32, height: 32)
-                            .background(Theme.surface.opacity(0.86), in: Circle())
+                            .frame(width: 30, height: 30)
+                            .background(Theme.surface.opacity(0.78), in: Circle())
                     }
                     .buttonStyle(TodayPressableButtonStyle())
                     .disabled(!canNavigateToNextMonth)
                 }
 
-                if showsCurrentMonthShortcut {
-                    HStack {
-                        Spacer(minLength: 0)
-
-                        Button {
-                            TodayHaptics.light()
-                            onCurrentMonthTap()
-                        } label: {
-                            Text("Current month")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Theme.textSecondary)
-                                .padding(.horizontal, 12)
-                                .frame(height: 30)
-                                .background(Theme.surface.opacity(0.72), in: Capsule(style: .continuous))
-                                .overlay {
-                                    Capsule(style: .continuous)
-                                        .stroke(Theme.textSecondary.opacity(0.14), lineWidth: 1)
-                                }
-                        }
-                        .buttonStyle(TodayPressableButtonStyle())
-                    }
-                    .transition(.opacity)
-                }
-
                 monthContent()
                     .transition(.opacity)
             } else {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.xxs) {
                     ForEach(weekItems) { item in
                         Button {
                             TodayHaptics.soft()
                             animatePulse(for: item.date)
                             onSelectWeekDay(item.date)
                         } label: {
-                            VStack(spacing: 4) {
+                            VStack(spacing: 3) {
                                 Text(item.weekdaySymbol)
-                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .font(Theme.Typography.caption)
                                     .foregroundStyle(item.isSelected ? Theme.accent : Theme.textSecondary)
 
                                 Text(item.dayNumber)
-                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .font(Theme.Typography.bodySmallStrong)
                                     .foregroundStyle(item.isSelected ? Theme.accent : Theme.text)
 
                                 Circle()
-                                    .fill(item.isComplete ? Theme.accent.opacity(0.70) : .clear)
-                                    .frame(width: 3.5, height: 3.5)
+                                    .fill(item.isComplete ? Theme.accent.opacity(0.62) : .clear)
+                                    .frame(width: 3, height: 3)
                             }
                             .frame(maxWidth: .infinity)
-                            .frame(height: 62)
-                            .opacity(item.isFuture ? 0.65 : 1)
+                            .frame(height: 48)
+                            .opacity(item.isFuture ? 0.68 : 1)
                             .background(
-                                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                    .fill(item.isSelected ? Theme.accent.opacity(0.16) : Theme.surface.opacity(0.64))
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(item.isSelected ? Theme.accent.opacity(0.13) : Theme.surface2.opacity(0.64))
                             )
                             .overlay {
-                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .stroke(
                                         item.isSelected
-                                            ? Theme.accent.opacity(0.62)
-                                            : (item.isToday ? Theme.accent.opacity(0.32) : Theme.textSecondary.opacity(0.12)),
-                                        lineWidth: item.isSelected ? 1.1 : 0.8
+                                            ? Theme.accent.opacity(0.50)
+                                            : (item.isToday ? Theme.accent.opacity(0.25) : Theme.textSecondary.opacity(0.10)),
+                                        lineWidth: 1
                                     )
                             }
-                            .shadow(
-                                color: item.isSelected ? Theme.accent.opacity(0.16) : .clear,
-                                radius: 8,
-                                y: 4
-                            )
                             .scaleEffect(isPulsing(item.date) ? 0.98 : 1)
                         }
                         .buttonStyle(TodayPressableButtonStyle())
@@ -582,34 +521,30 @@ struct TodayCalendarStripCard<MonthContent: View>: View {
                     reduceMotion ? .linear(duration: 0) : .easeOut(duration: 0.12),
                     value: pulsingDay
                 )
-
-                if showsBackToToday {
-                    HStack {
-                        Spacer(minLength: 0)
-
-                        Button {
-                            TodayHaptics.light()
-                            onBackToTodayTap()
-                        } label: {
-                            Text("Back to Today")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Theme.textSecondary)
-                                .padding(.horizontal, 12)
-                                .frame(height: 30)
-                                .background(Theme.surface.opacity(0.72), in: Capsule(style: .continuous))
-                                .overlay {
-                                    Capsule(style: .continuous)
-                                        .stroke(Theme.textSecondary.opacity(0.14), lineWidth: 1)
-                                }
-                        }
-                        .buttonStyle(TodayPressableButtonStyle())
-                    }
-                    .transition(.opacity)
-                }
             }
         }
-        .padding(TodayPremiumTokens.cardPadding)
-        .premiumGlassCard()
+        .padding(.horizontal, Theme.Spacing.sm)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Theme.surface.opacity(0.76))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Theme.textSecondary.opacity(0.10), lineWidth: 1)
+        }
+    }
+
+    private func textAction(title: String, action: @escaping () -> Void) -> some View {
+        Button {
+            TodayHaptics.light()
+            action()
+        } label: {
+            Text(title)
+                .font(Theme.Typography.caption.weight(.semibold))
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .buttonStyle(TodayPressableButtonStyle())
     }
 
     private func animatePulse(for day: Date) {
@@ -630,6 +565,8 @@ struct HabitMomentumItem: Identifiable {
     let id: UUID
     let title: String
     let isComplete: Bool
+    let trend: [Bool]
+    let todayTrendIndex: Int?
 }
 
 struct HabitMomentumCard: View {
@@ -733,9 +670,18 @@ struct HabitMomentumCard: View {
 
                                 Spacer(minLength: 0)
 
-                                Text(item.isComplete ? "Done" : "Open")
-                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(Theme.textSecondary.opacity(0.78))
+                                VStack(alignment: .trailing, spacing: 5) {
+                                    Text(item.isComplete ? "Done" : "Open")
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(Theme.textSecondary.opacity(0.78))
+
+                                    if !item.trend.isEmpty {
+                                        HabitMicroTrendView(
+                                            values: item.trend,
+                                            todayIndex: item.todayTrendIndex
+                                        )
+                                    }
+                                }
                             }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
@@ -1236,15 +1182,20 @@ struct TodayTaskListItem: Identifiable {
 }
 
 struct TasksListCard: View {
-    let upNextTitle: String?
-    let upNextEstimate: String?
-    let tasks: [TodayTaskListItem]
+    let upNext: [TodayTaskListItem]
+    let later: [TodayTaskListItem]
+    let carryOver: [TodayTaskListItem]
     let emptyStateTitle: String
     let emptyStateSubtitle: String
     let onTaskTap: (UUID) -> Void
     let onCompleteTask: (UUID) -> Void
+    let onStartFocusTask: (UUID) -> Void
     let onViewAll: () -> Void
     let onQuickAdd: () -> Void
+
+    private var hasAnyTasks: Bool {
+        !upNext.isEmpty || !later.isEmpty || !carryOver.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -1294,54 +1245,7 @@ struct TasksListCard: View {
                 .buttonStyle(TodayPressableButtonStyle())
             }
 
-            if let upNextTitle {
-                Button {
-                    TodayHaptics.light()
-                    onViewAll()
-                } label: {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Theme.accent.opacity(0.14))
-                                .frame(width: 32, height: 32)
-                            Image(systemName: "timer")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Theme.accent)
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Up next")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Theme.textSecondary.opacity(0.84))
-                            Text(upNextTitle)
-                                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Theme.text)
-                                .lineLimit(1)
-                        }
-
-                        Spacer(minLength: 0)
-
-                        if let upNextEstimate {
-                            Text(upNextEstimate)
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                                .foregroundStyle(Theme.textSecondary.opacity(0.88))
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 60)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Theme.surface2.opacity(0.35))
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                    }
-                }
-                .buttonStyle(TodayPressableButtonStyle())
-            }
-
-            if tasks.isEmpty {
+            if !hasAnyTasks {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(emptyStateTitle)
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
@@ -1385,79 +1289,168 @@ struct TasksListCard: View {
                 }
             } else {
                 VStack(spacing: TodayPremiumTokens.innerRowSpacing) {
-                    ForEach(tasks) { task in
-                        HStack(spacing: 12) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(task.iconTint.opacity(0.18))
-                                    .frame(width: 32, height: 32)
-                                Image(systemName: task.icon)
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(task.iconTint)
-                            }
-
-                            Button {
-                                TodayHaptics.light()
-                                onTaskTap(task.id)
-                            } label: {
-                                HStack(spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(task.title)
-                                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                            .foregroundStyle(Theme.text)
-                                            .lineLimit(2)
-
-                                        if let subtitle = task.subtitle {
-                                            Text(subtitle)
-                                                .font(.system(size: 13, weight: .medium, design: .rounded))
-                                                .foregroundStyle(Theme.textSecondary.opacity(0.86))
-                                                .lineLimit(1)
-                                        }
-                                    }
-
-                                    Spacer(minLength: 0)
-
-                                    if let minutesLabel = task.minutesLabel {
-                                        Text(minutesLabel)
-                                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                                            .foregroundStyle(Theme.textSecondary.opacity(0.90))
-                                    }
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(Theme.textSecondary.opacity(0.68))
-                                }
-                            }
-                            .buttonStyle(TodayPressableButtonStyle())
-
-                            Button {
-                                TodayHaptics.light()
-                                onCompleteTask(task.id)
-                            } label: {
-                                Image(systemName: "checkmark.circle")
-                                    .font(.system(size: 20, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(Theme.textSecondary.opacity(0.92))
-                                    .frame(width: 30, height: 30)
-                            }
-                            .buttonStyle(TodayPressableButtonStyle())
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 12)
-                        .frame(minHeight: 64)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(Theme.surface2.opacity(0.35))
+                    if !upNext.isEmpty {
+                        taskSection(
+                            title: "Up next",
+                            tasks: upNext,
+                            emphasizeFirst: true,
+                            showFocusButtonForFirst: true
                         )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                        }
+                    }
+
+                    if !later.isEmpty {
+                        taskSection(
+                            title: "Later today",
+                            tasks: later
+                        )
+                    }
+
+                    if !carryOver.isEmpty {
+                        taskSection(
+                            title: "Carry-over",
+                            tasks: carryOver
+                        )
                     }
                 }
             }
         }
         .padding(TodayPremiumTokens.cardPadding)
         .premiumGlassCard()
+    }
+
+    private func taskSection(
+        title: String,
+        tasks: [TodayTaskListItem],
+        emphasizeFirst: Bool = false,
+        showFocusButtonForFirst: Bool = false
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(
+                    emphasizeFirst
+                        ? .system(size: 14, weight: .semibold, design: .rounded)
+                        : .system(size: 13, weight: .semibold, design: .rounded)
+                )
+                .foregroundStyle(
+                    emphasizeFirst
+                        ? Theme.text
+                        : Theme.textSecondary.opacity(0.86)
+                )
+
+            VStack(spacing: TodayPremiumTokens.innerRowSpacing) {
+                ForEach(Array(tasks.enumerated()), id: \.offset) { index, task in
+                    taskRow(
+                        task,
+                        isEmphasized: emphasizeFirst && index == 0,
+                        showsFocusButton: showFocusButtonForFirst && index == 0
+                    )
+                }
+            }
+        }
+    }
+
+    private func taskRow(
+        _ task: TodayTaskListItem,
+        isEmphasized: Bool,
+        showsFocusButton: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(task.iconTint.opacity(0.18))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: task.icon)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(task.iconTint)
+                }
+
+                Button {
+                    TodayHaptics.light()
+                    onTaskTap(task.id)
+                } label: {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(task.title)
+                                .font(
+                                    isEmphasized
+                                        ? .system(size: 16, weight: .semibold, design: .rounded)
+                                        : .system(size: 15, weight: .semibold, design: .rounded)
+                                )
+                                .foregroundStyle(Theme.text)
+                                .lineLimit(2)
+
+                            if let subtitle = task.subtitle {
+                                Text(subtitle)
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .foregroundStyle(Theme.textSecondary.opacity(0.86))
+                                    .lineLimit(1)
+                            }
+                        }
+
+                        Spacer(minLength: 0)
+
+                        if let minutesLabel = task.minutesLabel {
+                            Text(minutesLabel)
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .foregroundStyle(Theme.textSecondary.opacity(0.90))
+                        }
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.textSecondary.opacity(0.68))
+                    }
+                }
+                .buttonStyle(TodayPressableButtonStyle())
+
+                Button {
+                    TodayHaptics.light()
+                    onCompleteTask(task.id)
+                } label: {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.textSecondary.opacity(0.92))
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(TodayPressableButtonStyle())
+            }
+
+            if showsFocusButton {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button {
+                        TodayHaptics.light()
+                        onStartFocusTask(task.id)
+                    } label: {
+                        Text("Start focus")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.horizontal, 8)
+                            .frame(height: 24)
+                            .background(Theme.accent.opacity(0.12), in: Capsule(style: .continuous))
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .stroke(Theme.accent.opacity(0.24), lineWidth: 1)
+                            }
+                    }
+                    .buttonStyle(TodayPressableButtonStyle())
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .frame(minHeight: 64)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isEmphasized ? Theme.accent.opacity(0.10) : Theme.surface2.opacity(0.35))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(
+                    isEmphasized ? Theme.accent.opacity(0.26) : Color.white.opacity(0.14),
+                    lineWidth: 1
+                )
+        }
     }
 }
 

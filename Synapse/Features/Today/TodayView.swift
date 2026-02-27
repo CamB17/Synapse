@@ -106,6 +106,12 @@ struct TodayView: View {
         let defaultStartDate: Date
     }
 
+    private struct TaskSections {
+        let upNext: [TaskItem]
+        let later: [TaskItem]
+        let carryOver: [TaskItem]
+    }
+
     private enum FocusTimeFilter: String, CaseIterable {
         case morning
         case afternoon
@@ -476,6 +482,12 @@ struct TodayView: View {
         )
     }
 
+    private var completionDaysByHabit: [UUID: Set<Date>] {
+        Dictionary(grouping: habitCompletions, by: \.habitId).mapValues { records in
+            Set(records.map { calendar.startOfDay(for: $0.day) })
+        }
+    }
+
     private var selectedDayHabitSummary: HabitDaySummary {
         habitSummary(for: selectedDayStart)
     }
@@ -516,7 +528,16 @@ struct TodayView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                TodayAtmosphereBackground()
+                Theme.canvas(for: selectedDayStart)
+                    .ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    Theme.topDepthGradient(for: selectedDayStart)
+                        .opacity(0.28)
+                        .frame(height: 180)
+                    Spacer()
+                }
+                .ignoresSafeArea(edges: .top)
 
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: TodayPremiumTokens.sectionSpacing) {
@@ -557,31 +578,89 @@ struct TodayView: View {
                             monthHeatmapPager
                         }
 
-                        VStack(alignment: .leading, spacing: TodayPremiumTokens.sectionSpacing) {
-                            HabitMomentumCard(
-                                completedHabitsCount: completedHabitsCount,
-                                totalActiveHabitsCount: totalActiveHabitsCount,
-                                habitsProgress: habitsProgress,
-                                showCompletionPulse: headerCompletionGlow,
-                                items: habitQuickRows,
+                        TodayHeroModule(
+                            timeOfDayLabel: timeOfDayLabel,
+                            commitment: todayCommitment,
+                            tasksRemainingCount: assignedTasksForSelectedDay.count,
+                            nextAppointmentSummary: heroNextAppointmentSummary,
+                            onStartFocus: {
+                                triggerFocusEntry(preselectUpNext: true)
+                            },
+                            onViewAppointment: { appointment in
+                                openAppointment(with: appointment.id)
+                            },
+                            onChooseTask: {
+                                openTasksOverview()
+                            },
+                            onQuickAdd: {
+                                showingCapture = true
+                            },
+                            onViewDetails: {
+                                openAppointmentsOverview()
+                            }
+                        )
+
+                        TodayQueueCard(
+                            upNext: queueUpNextItems,
+                            later: queueLaterItems,
+                            carryOver: queueCarryOverItems,
+                            filterOptions: FocusTimeFilter.allCases.map(\.label),
+                            selectedFilter: selectedFocusFilterLabel,
+                            emptyStateTitle: tasksEmptyStateTitle,
+                            emptyStateSubtitle: tasksEmptyStateSubtitle,
+                            onSelectFilter: { label in
+                                selectFocusFilter(with: label)
+                            },
+                            onTaskTap: { taskID in
+                                selectTask(with: taskID)
+                            },
+                            onCompleteTask: { taskID in
+                                completeTaskInPremiumList(with: taskID)
+                            },
+                            onStartFocusTask: { taskID in
+                                startFocusForTask(with: taskID)
+                            },
+                            onQuickAdd: {
+                                showingCapture = true
+                            },
+                            onViewAll: {
+                                openTasksOverview()
+                            }
+                        )
+                        .id("today-queue-\(focusTimeFilter.rawValue)-\(selectedDayStart.timeIntervalSince1970)")
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .offset(y: 6).combined(with: .opacity)
+                        )
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                            HabitsSnapshotCard(
+                                completedCount: completedHabitsCount,
+                                totalCount: totalActiveHabitsCount,
+                                items: habitsSnapshotItems,
                                 onToggleHabit: { habitID in
                                     guard let habit = activeHabitsForSelectedDay.first(where: { $0.id == habitID }) else { return }
                                     toggleHabitForSelectedDay(habit)
                                 },
-                                onManageTap: {
+                                onManage: {
                                     openHabitsOverview()
                                 },
-                                onAddHabitTap: {
+                                onAddHabit: {
                                     openHabitEditor()
+                                },
+                                onViewAll: {
+                                    openHabitsOverview()
                                 }
                             )
 
-                            AppointmentsPreviewCard(
-                                totalCount: appointmentsForSelectedDay.count,
-                                upcomingLine: upcomingAppointmentLine,
-                                items: appointmentPreviewItems,
-                                remainingCount: remainingAppointmentCount,
-                                onTapItem: { appointmentID in
+                            Divider()
+                                .overlay(Theme.text.opacity(0.08))
+
+                            AppointmentsCompactCard(
+                                soonAppointment: soonAppointmentForCard,
+                                isHeroShowingAppointment: heroShowsAppointment,
+                                onOpenSoon: { appointmentID in
                                     openAppointment(with: appointmentID)
                                 },
                                 onViewAll: {
@@ -590,45 +669,6 @@ struct TodayView: View {
                                 onAdd: {
                                     openNewAppointmentEditor()
                                 }
-                            )
-
-                            TasksSectionHeader(
-                                timeOfDayLabel: timeOfDayLabel,
-                                symbolName: timeOfDaySymbolName
-                            )
-
-                            TimeOfDayChipsRow(
-                                options: FocusTimeFilter.allCases.map(\.label),
-                                selectedOption: selectedFocusFilterLabel,
-                                onSelect: { label in
-                                    selectFocusFilter(with: label)
-                                }
-                            )
-
-                            TasksListCard(
-                                upNextTitle: upNextTaskTitle,
-                                upNextEstimate: upNextTaskEstimate,
-                                tasks: tasksListItems,
-                                emptyStateTitle: tasksEmptyStateTitle,
-                                emptyStateSubtitle: tasksEmptyStateSubtitle,
-                                onTaskTap: { taskID in
-                                    selectTask(with: taskID)
-                                },
-                                onCompleteTask: { taskID in
-                                    completeTaskInPremiumList(with: taskID)
-                                },
-                                onViewAll: {
-                                    openTasksOverview()
-                                },
-                                onQuickAdd: {
-                                    showingCapture = true
-                                }
-                            )
-                            .id("tasks-list-\(focusTimeFilter.rawValue)-\(selectedDayStart.timeIntervalSince1970)")
-                            .transition(
-                                reduceMotion
-                                    ? .opacity
-                                    : .offset(y: 6).combined(with: .opacity)
                             )
                         }
                         .id(selectedDayStart)
@@ -855,6 +895,10 @@ struct TodayView: View {
         filteredTasksForSelectedDay
     }
 
+    private var totalFocusMinutesSelectedDay: Int {
+        max(0, totalFocusSecondsSelectedDay / 60)
+    }
+
     private var timeOfDayLabel: String {
         partOfDayLabel(currentPartOfDay)
     }
@@ -887,12 +931,22 @@ struct TodayView: View {
         }
     }
 
-    private var habitQuickRows: [HabitMomentumItem] {
-        orderedActiveHabitsForSelectedDay.map { habit in
-            HabitMomentumItem(
+    private var habitsSnapshotItems: [HabitsSnapshotCard.Item] {
+        let todayIndex = HabitTrendService.todayIndex(endingOn: selectedDayStart, calendar: calendar)
+        return orderedActiveHabitsForSelectedDay.map { habit in
+            let trend = HabitTrendService.lastSevenDays(
+                for: habit.id,
+                endingOn: selectedDayStart,
+                completionDaysByHabit: completionDaysByHabit,
+                calendar: calendar
+            )
+            return HabitsSnapshotCard.Item(
                 id: habit.id,
                 title: habit.title,
-                isComplete: completedHabitIDsForSelectedDay.contains(habit.id)
+                isComplete: completedHabitIDsForSelectedDay.contains(habit.id),
+                trend: trend,
+                todayTrendIndex: todayIndex,
+                streakLabel: streakLabel(from: trend)
             )
         }
     }
@@ -907,7 +961,7 @@ struct TodayView: View {
     }
 
     private var primaryFocusTaskForEntry: TaskItem? {
-        tasksForTodayContent.first
+        taskSections.upNext.first ?? tasksForTodayContent.first
     }
 
     private var loggedFocusMinutesByTaskForSelectedDay: [UUID: Int] {
@@ -939,102 +993,83 @@ struct TodayView: View {
     private var nextUpcomingAppointmentForUpNext: Appointment? {
         guard isTodaySelectedDay else { return nil }
         let now = Date()
-        let upcomingAppointments = appointmentsForSelectedDay.filter { appointment in
-            appointment.resolvedEndDate > now
-        }
-        return upcomingAppointments.first
-    }
+        let horizon = calendar.date(byAdding: .hour, value: 6, to: now) ?? now
 
-    private var appointmentPreviewItems: [TodayAppointmentListItem] {
-        Array(appointmentsForSelectedDay.prefix(2)).map { appointment in
-            TodayAppointmentListItem(
-                id: appointment.id,
-                title: displayAppointmentTitle(appointment),
-                detail: appointmentDetailLine(for: appointment),
-                icon: appointment.isAllDay ? "calendar" : "clock"
-            )
+        return appointmentsForSelectedDay.first { appointment in
+            appointment.resolvedEndDate > now && appointment.startDate <= horizon
         }
     }
 
-    private var remainingAppointmentCount: Int {
-        max(0, appointmentsForSelectedDay.count - appointmentPreviewItems.count)
+    private var todayCommitment: TodayCommitment {
+        TodayCommitmentResolver.resolve(
+            selectedDay: selectedDayStart,
+            upNextTask: taskSections.upNext.first,
+            fallbackTask: firstIncompleteTaskForCommitment,
+            nextUpcomingAppointment: nextUpcomingAppointmentForUpNext,
+            now: Date(),
+            calendar: calendar
+        )
     }
 
-    private var upcomingAppointmentLine: String? {
+    private var firstIncompleteTaskForCommitment: TaskItem? {
+        assignedTasksForSelectedDay.first
+    }
+
+    private var heroShowsAppointment: Bool {
+        if case .appointment = todayCommitment { return true }
+        return false
+    }
+
+    private var soonAppointmentForCard: AppointmentsCompactCard.SoonAppointment? {
         guard let appointment = nextUpcomingAppointmentForUpNext else { return nil }
-        return upNextSubtitle(for: appointment)
+        let rawLocation = appointment.location?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let location = (rawLocation?.isEmpty == false) ? rawLocation : nil
+
+        return AppointmentsCompactCard.SoonAppointment(
+            id: appointment.id,
+            title: displayAppointmentTitle(appointment),
+            timeLabel: AppointmentPresentation.timeLabel(for: appointment, day: selectedDayStart),
+            location: location
+        )
     }
 
-    private func appointmentDetailLine(for appointment: Appointment) -> String {
-        AppointmentPresentation.timeLabel(for: appointment, day: selectedDayStart)
-    }
-
-    private func upNextSubtitle(for appointment: Appointment) -> String {
-        let title = appointment.title.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if appointment.isAllDay {
-            return title.isEmpty ? "All day" : "All day · \(title)"
-        }
-
-        let relative = relativeTimeString(to: appointment.startDate)
-        guard !title.isEmpty else { return relative == "now" ? "Starting now" : relative }
-        return relative == "now" ? "\(title) now" : "\(title) \(relative)"
-    }
-
-    private func relativeTimeString(to date: Date) -> String {
-        let interval = Int(date.timeIntervalSinceNow.rounded())
-        if interval <= 60 {
-            return "now"
-        }
-
-        let totalMinutes = max(1, interval / 60)
-        if totalMinutes < 60 {
-            return "in \(totalMinutes) min"
-        }
-
-        let hours = totalMinutes / 60
-        let remainder = totalMinutes % 60
-        if remainder == 0 {
-            return "in \(hours) hr"
-        }
-        return "in \(hours)h \(remainder)m"
+    private var heroNextAppointmentSummary: String? {
+        guard let appointment = nextUpcomingAppointmentForUpNext else { return nil }
+        return AppointmentPresentation.timeLabel(for: appointment, day: selectedDayStart)
     }
 
     private var selectedFocusFilterLabel: String {
         focusTimeFilter.label
     }
 
-    private var tasksListItems: [TodayTaskListItem] {
-        tasksForTodayContent.map { task in
-            let iconAndTint = taskIcon(for: task)
-            return TodayTaskListItem(
-                id: task.id,
-                title: displayTaskTitle(task),
-                subtitle: taskSubtitle(for: task),
-                minutesLabel: "\(plannedMinutes(for: task)) min",
-                icon: iconAndTint.icon,
-                iconTint: iconAndTint.tint
-            )
-        }
+    private var taskSections: TaskSections {
+        let carryOver = filteredTasksForSelectedDay.filter { $0.carriedOverFrom != nil }
+        let nonCarryOver = filteredTasksForSelectedDay.filter { $0.carriedOverFrom == nil }
+        let upNext = Array(nonCarryOver.prefix(2))
+        let later = Array(nonCarryOver.dropFirst(upNext.count))
+        return TaskSections(upNext: upNext, later: later, carryOver: carryOver)
     }
 
-    private var upNextTaskTitle: String? {
-        tasksListItems.first?.title
+    private var queueUpNextItems: [TodayQueueCard.Item] {
+        taskSections.upNext.map { queueItem(for: $0, isCarryOver: false) }
     }
 
-    private var upNextTaskEstimate: String? {
-        tasksListItems.first?.minutesLabel
+    private var queueLaterItems: [TodayQueueCard.Item] {
+        taskSections.later.map { queueItem(for: $0, isCarryOver: false) }
     }
 
-    private func taskIcon(for task: TaskItem) -> (icon: String, tint: Color) {
-        switch task.priority {
-        case .high:
-            return ("flag.fill", Theme.accent)
-        case .medium:
-            return ("line.3.horizontal.circle.fill", Theme.textSecondary)
-        case .low:
-            return ("circle.grid.2x2.fill", Theme.textSecondary)
-        }
+    private var queueCarryOverItems: [TodayQueueCard.Item] {
+        taskSections.carryOver.map { queueItem(for: $0, isCarryOver: true) }
+    }
+
+    private func queueItem(for task: TaskItem, isCarryOver: Bool) -> TodayQueueCard.Item {
+        TodayQueueCard.Item(
+            id: task.id,
+            title: displayTaskTitle(task),
+            metadata: taskSubtitle(for: task),
+            estimateLabel: "\(plannedMinutes(for: task))m",
+            isCarryOver: isCarryOver
+        )
     }
 
     private func taskSubtitle(for task: TaskItem) -> String? {
@@ -1046,6 +1081,19 @@ struct TodayView: View {
             parts.append("Carried over")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func streakLabel(from trend: [Bool]) -> String? {
+        var count = 0
+        for value in trend.reversed() {
+            if value {
+                count += 1
+            } else {
+                break
+            }
+        }
+        guard count > 1 else { return nil }
+        return "\(count)d"
     }
 
     private func displayTaskTitle(_ task: TaskItem) -> String {
@@ -1078,6 +1126,12 @@ struct TodayView: View {
             focusActiveTaskID = task.id
         }
         openFocusSetup()
+    }
+
+    private func startFocusForTask(with id: UUID) {
+        guard tasksForTodayContent.contains(where: { $0.id == id }) else { return }
+        focusActiveTaskID = id
+        triggerFocusEntry(preselectUpNext: false)
     }
 
     private func openHabitEditor() {
@@ -2177,7 +2231,7 @@ struct TodayView: View {
                 Spacer(minLength: 86)
 
                 Text(activeFocusTask?.title ?? "Choose one thing.")
-                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                    .font(Theme.appFont(.semibold, size: 30))
                     .foregroundStyle(Theme.text)
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
@@ -2188,7 +2242,7 @@ struct TodayView: View {
                         .fill(Theme.accent.opacity(0.08))
                         .frame(width: 206, height: 206)
                     Text(timeString(focusElapsedSeconds))
-                        .font(.system(size: 72, weight: .semibold, design: .rounded))
+                        .font(Theme.appFont(.semibold, size: 72))
                         .monospacedDigit()
                         .foregroundStyle(Theme.text)
                         .contentTransition(.numericText())

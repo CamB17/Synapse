@@ -2,10 +2,19 @@ import SwiftUI
 
 struct ScreenCanvas<Content: View>: View {
     private let daySeed: Date
+    private let showsTopDepthGradient: Bool
+    private let topDepthOpacity: Double
     let content: Content
 
-    init(daySeed: Date = .now, @ViewBuilder content: () -> Content) {
+    init(
+        daySeed: Date = .now,
+        showsTopDepthGradient: Bool = true,
+        topDepthOpacity: Double = 1,
+        @ViewBuilder content: () -> Content
+    ) {
         self.daySeed = daySeed
+        self.showsTopDepthGradient = showsTopDepthGradient
+        self.topDepthOpacity = topDepthOpacity
         self.content = content()
     }
 
@@ -14,12 +23,15 @@ struct ScreenCanvas<Content: View>: View {
             Theme.canvas(for: daySeed)
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                Theme.topDepthGradient(for: daySeed)
-                    .frame(height: 280)
-                Spacer()
+            if showsTopDepthGradient {
+                VStack(spacing: 0) {
+                    Theme.topDepthGradient(for: daySeed)
+                        .opacity(topDepthOpacity)
+                        .frame(height: 220)
+                    Spacer()
+                }
+                .ignoresSafeArea(edges: .top)
             }
-            .ignoresSafeArea(edges: .top)
 
             content
         }
