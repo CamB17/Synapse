@@ -582,7 +582,7 @@ struct TodayView: View {
                             timeOfDayLabel: timeOfDayLabel,
                             commitment: todayCommitment,
                             tasksRemainingCount: assignedTasksForSelectedDay.count,
-                            focusMinutesToday: totalFocusMinutesSelectedDay,
+                            nextAppointmentSummary: heroNextAppointmentSummary,
                             onStartFocus: {
                                 triggerFocusEntry(preselectUpNext: true)
                             },
@@ -600,41 +600,41 @@ struct TodayView: View {
                             }
                         )
 
-                        VStack(alignment: .leading, spacing: TodayPremiumTokens.sectionSpacing) {
-                            TodayQueueCard(
-                                upNext: queueUpNextItems,
-                                later: queueLaterItems,
-                                carryOver: queueCarryOverItems,
-                                filterOptions: FocusTimeFilter.allCases.map(\.label),
-                                selectedFilter: selectedFocusFilterLabel,
-                                emptyStateTitle: tasksEmptyStateTitle,
-                                emptyStateSubtitle: tasksEmptyStateSubtitle,
-                                onSelectFilter: { label in
-                                    selectFocusFilter(with: label)
-                                },
-                                onTaskTap: { taskID in
-                                    selectTask(with: taskID)
-                                },
-                                onCompleteTask: { taskID in
-                                    completeTaskInPremiumList(with: taskID)
-                                },
-                                onStartFocusTask: { taskID in
-                                    startFocusForTask(with: taskID)
-                                },
-                                onQuickAdd: {
-                                    showingCapture = true
-                                },
-                                onViewAll: {
-                                    openTasksOverview()
-                                }
-                            )
-                            .id("today-queue-\(focusTimeFilter.rawValue)-\(selectedDayStart.timeIntervalSince1970)")
-                            .transition(
-                                reduceMotion
-                                    ? .opacity
-                                    : .offset(y: 6).combined(with: .opacity)
-                            )
+                        TodayQueueCard(
+                            upNext: queueUpNextItems,
+                            later: queueLaterItems,
+                            carryOver: queueCarryOverItems,
+                            filterOptions: FocusTimeFilter.allCases.map(\.label),
+                            selectedFilter: selectedFocusFilterLabel,
+                            emptyStateTitle: tasksEmptyStateTitle,
+                            emptyStateSubtitle: tasksEmptyStateSubtitle,
+                            onSelectFilter: { label in
+                                selectFocusFilter(with: label)
+                            },
+                            onTaskTap: { taskID in
+                                selectTask(with: taskID)
+                            },
+                            onCompleteTask: { taskID in
+                                completeTaskInPremiumList(with: taskID)
+                            },
+                            onStartFocusTask: { taskID in
+                                startFocusForTask(with: taskID)
+                            },
+                            onQuickAdd: {
+                                showingCapture = true
+                            },
+                            onViewAll: {
+                                openTasksOverview()
+                            }
+                        )
+                        .id("today-queue-\(focusTimeFilter.rawValue)-\(selectedDayStart.timeIntervalSince1970)")
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .offset(y: 6).combined(with: .opacity)
+                        )
 
+                        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                             HabitsSnapshotCard(
                                 completedCount: completedHabitsCount,
                                 totalCount: totalActiveHabitsCount,
@@ -653,6 +653,9 @@ struct TodayView: View {
                                     openHabitsOverview()
                                 }
                             )
+
+                            Divider()
+                                .overlay(Theme.text.opacity(0.08))
 
                             AppointmentsCompactCard(
                                 soonAppointment: soonAppointmentForCard,
@@ -1028,6 +1031,11 @@ struct TodayView: View {
             timeLabel: AppointmentPresentation.timeLabel(for: appointment, day: selectedDayStart),
             location: location
         )
+    }
+
+    private var heroNextAppointmentSummary: String? {
+        guard let appointment = nextUpcomingAppointmentForUpNext else { return nil }
+        return AppointmentPresentation.timeLabel(for: appointment, day: selectedDayStart)
     }
 
     private var selectedFocusFilterLabel: String {

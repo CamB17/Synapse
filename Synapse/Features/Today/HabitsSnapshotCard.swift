@@ -55,7 +55,7 @@ struct HabitsSnapshotCard: View {
                         habitRow(item)
                         if item.id != visibleItems.last?.id {
                             Divider()
-                                .overlay(Theme.text.opacity(0.08))
+                                .overlay(Theme.text.opacity(0.10))
                                 .padding(.leading, 30)
                         }
                     }
@@ -89,9 +89,19 @@ struct HabitsSnapshotCard: View {
                 .foregroundStyle(Theme.text)
 
             Text("\(completedCount)/\(max(totalCount, 0))")
-                .font(Theme.Typography.metricValue)
+                .font(Theme.Typography.bodySmallStrong)
                 .monospacedDigit()
                 .foregroundStyle(Theme.accent)
+                .padding(.horizontal, Theme.Spacing.xs)
+                .frame(height: 24)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Theme.accent.opacity(0.12))
+                )
+                .overlay {
+                    Capsule(style: .continuous)
+                        .stroke(Theme.accent.opacity(0.26), lineWidth: 1)
+                }
 
             Spacer(minLength: 0)
 
@@ -135,14 +145,33 @@ struct HabitsSnapshotCard: View {
 
                 HabitMicroTrendView(values: item.trend, todayIndex: item.todayTrendIndex)
 
-                if let streakLabel = item.streakLabel {
-                    Text(streakLabel)
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                }
+                streakChip(label: item.streakLabel)
             }
             .padding(.vertical, Theme.Spacing.xs)
         }
         .buttonStyle(TodayPressableButtonStyle())
+    }
+
+    @ViewBuilder
+    private func streakChip(label: String?) -> some View {
+        if let label {
+            Text(label)
+                .font(Theme.Typography.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .padding(.horizontal, Theme.Spacing.xs)
+                .frame(height: 22)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Theme.surface2.opacity(0.86))
+                )
+                .overlay {
+                    Capsule(style: .continuous)
+                        .stroke(Theme.text.opacity(0.10), lineWidth: 1)
+                }
+                .frame(width: 40, alignment: .trailing)
+        } else {
+            Color.clear
+                .frame(width: 40, height: 22)
+        }
     }
 }

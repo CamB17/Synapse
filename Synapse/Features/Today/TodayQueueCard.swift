@@ -35,53 +35,52 @@ struct TodayQueueCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             header
                 .padding(.horizontal, Theme.Spacing.cardInset)
                 .padding(.top, Theme.Spacing.cardInset)
 
-            chipsRow
-                .padding(.horizontal, Theme.Spacing.cardInset)
-                .padding(.top, Theme.Spacing.xs)
-                .padding(.bottom, Theme.Spacing.sm)
-
-            Divider()
-                .overlay(Theme.text.opacity(0.08))
-
             if hasAnyTasks {
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     if !upNext.isEmpty {
-                        taskSection(
-                            title: "Up next",
-                            items: upNext,
-                            emphasizesFirst: true
-                        )
+                        taskSection(title: "UP NEXT", items: upNext)
                     }
 
                     if !later.isEmpty {
-                        taskSection(title: "Later today", items: later)
+                        taskSection(title: "LATER", items: later)
                     }
 
                     if !carryOver.isEmpty {
-                        taskSection(title: "Carry-over", items: carryOver)
+                        taskSection(title: "CARRY-OVER", items: carryOver)
                     }
                 }
-                .padding(Theme.Spacing.cardInset)
+                .padding(.horizontal, Theme.Spacing.cardInset)
+                .padding(.bottom, Theme.Spacing.cardInset)
             } else {
                 emptyState
-                    .padding(Theme.Spacing.cardInset)
+                    .padding(.horizontal, Theme.Spacing.cardInset)
+                    .padding(.bottom, Theme.Spacing.cardInset)
             }
         }
-        .premiumGlassCard(cornerRadius: 14, shadowStrength: 1)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Theme.surface.opacity(0.95))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Theme.text.opacity(0.10), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.035), radius: 10, y: 5)
     }
 
     private var header: some View {
-        HStack(spacing: Theme.Spacing.sm) {
+        HStack(spacing: Theme.Spacing.xs) {
             Text("Tasks")
                 .font(Theme.Typography.sectionTitle)
                 .foregroundStyle(Theme.text)
 
-            Spacer(minLength: 0)
+            chipsRow
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             textAction(title: "Quick add", action: onQuickAdd)
             textAction(title: "View all", action: onViewAll)
@@ -101,15 +100,15 @@ struct TodayQueueCard: View {
                             .font(Theme.Typography.chipLabel)
                             .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)
                             .padding(.horizontal, 10)
-                            .frame(height: 26)
+                            .frame(height: 24)
                             .background(
                                 Capsule(style: .continuous)
-                                    .fill(isSelected ? Theme.accent.opacity(0.16) : Theme.surface2.opacity(0.9))
+                                    .fill(isSelected ? Theme.accent.opacity(0.14) : Theme.surface2.opacity(0.82))
                             )
                             .overlay {
                                 Capsule(style: .continuous)
                                     .stroke(
-                                        isSelected ? Theme.accent.opacity(0.34) : Theme.text.opacity(0.08),
+                                        isSelected ? Theme.accent.opacity(0.30) : Theme.text.opacity(0.09),
                                         lineWidth: 1
                                     )
                             }
@@ -118,12 +117,12 @@ struct TodayQueueCard: View {
                 }
             }
         }
+        .frame(height: 24)
     }
 
     private func taskSection(
         title: String,
-        items: [Item],
-        emphasizesFirst: Bool = false
+        items: [Item]
     ) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Text(title)
@@ -134,35 +133,19 @@ struct TodayQueueCard: View {
 
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    queueRow(
-                        item,
-                        highlights: emphasizesFirst && index == 0,
-                        showsStartFocus: emphasizesFirst && index == 0
-                    )
+                    queueRow(item)
 
                     if index < items.count - 1 {
                         Divider()
-                            .overlay(Theme.text.opacity(0.08))
-                            .padding(.leading, 34)
+                            .overlay(Theme.text.opacity(0.10))
+                            .padding(.leading, 32)
                     }
                 }
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Theme.surface2.opacity(0.78))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Theme.text.opacity(0.08), lineWidth: 1)
             }
         }
     }
 
-    private func queueRow(
-        _ item: Item,
-        highlights: Bool,
-        showsStartFocus: Bool
-    ) -> some View {
+    private func queueRow(_ item: Item) -> some View {
         HStack(spacing: 10) {
             Button {
                 TodayHaptics.light()
@@ -181,16 +164,12 @@ struct TodayQueueCard: View {
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.title)
-                        .font(
-                            highlights
-                                ? Theme.Typography.itemTitleProminent
-                                : Theme.Typography.itemTitle
-                        )
+                        .font(Theme.Typography.itemTitle)
                         .foregroundStyle(Theme.text)
                         .lineLimit(2)
 
                     if let metadata = item.metadata {
-                    Text(metadata)
+                        Text(metadata)
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.textSecondary)
                             .lineLimit(1)
@@ -200,35 +179,26 @@ struct TodayQueueCard: View {
             }
             .buttonStyle(TodayPressableButtonStyle())
 
-            VStack(alignment: .trailing, spacing: Theme.Spacing.xxxs) {
-                if let estimateLabel = item.estimateLabel {
-                    Text(estimateLabel)
-                        .font(Theme.Typography.caption)
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.textSecondary)
-                }
-
-                if showsStartFocus {
-                    Button {
-                        TodayHaptics.light()
-                        onStartFocusTask(item.id)
-                    } label: {
-                        HStack(spacing: Theme.Spacing.xxxs) {
-                            Text("Start")
-                            Image(systemName: "chevron.right")
-                                .font(Theme.Typography.caption.weight(.semibold))
-                        }
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
+            Button {
+                TodayHaptics.light()
+                onStartFocusTask(item.id)
+            } label: {
+                HStack(spacing: Theme.Spacing.xxxs) {
+                    if let estimateLabel = item.estimateLabel {
+                        Text(estimateLabel)
+                            .font(Theme.Typography.caption)
+                            .monospacedDigit()
                     }
-                    .buttonStyle(TodayPressableButtonStyle())
-                    .accessibilityLabel("Start focus")
+                    Image(systemName: "chevron.right")
+                        .font(Theme.Typography.caption.weight(.semibold))
                 }
+                .foregroundStyle(Theme.textSecondary)
             }
+            .buttonStyle(TodayPressableButtonStyle())
+            .accessibilityLabel("Start focus")
         }
-        .padding(.horizontal, Theme.Spacing.xs)
+        .padding(.horizontal, Theme.Spacing.xxxs)
         .padding(.vertical, Theme.Spacing.xs)
-        .background(highlights ? Theme.accent.opacity(0.08) : .clear)
     }
 
     private var emptyState: some View {

@@ -368,64 +368,61 @@ struct TodayCalendarStripCard<MonthContent: View>: View {
     @State private var pulsingDay: Date?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Button {
-                    TodayHaptics.light()
-                    onChooseMonthYear()
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(monthLabel)
-                            .font(Theme.Typography.bodySmallStrong)
-                            .foregroundStyle(Theme.textSecondary)
-
-                        Image(systemName: "chevron.down")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(Theme.textSecondary.opacity(0.8))
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(height: TodayPremiumTokens.minTapHeight)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Theme.surface.opacity(0.7))
-                    )
-                }
-                .buttonStyle(TodayPressableButtonStyle())
-
-                Spacer(minLength: 0)
-
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(spacing: Theme.Spacing.xs) {
                 Button {
                     TodayHaptics.light()
                     onToggleMonth()
                 } label: {
-                    HStack(spacing: 6) {
-                        Text(isMonthExpanded ? "Week" : "Month")
+                    HStack(spacing: Theme.Spacing.xxxs) {
+                        Text(monthLabel)
                             .font(Theme.Typography.bodySmallStrong)
                             .foregroundStyle(isMonthExpanded ? Theme.accent : Theme.textSecondary)
-
-                        Image(systemName: isMonthExpanded ? "calendar" : "calendar.badge.clock")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(isMonthExpanded ? Theme.accent : Theme.textSecondary)
+                        Image(systemName: isMonthExpanded ? "chevron.up" : "chevron.down")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(isMonthExpanded ? Theme.accent : Theme.textSecondary.opacity(0.9))
                     }
-                    .padding(.horizontal, 12)
-                    .frame(height: TodayPremiumTokens.minTapHeight)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .frame(height: 30)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(isMonthExpanded ? Theme.accent.opacity(0.14) : Theme.surface.opacity(0.7))
+                            .fill(isMonthExpanded ? Theme.accent.opacity(0.13) : Theme.surface2.opacity(0.72))
                     )
                     .overlay {
                         Capsule(style: .continuous)
                             .stroke(
-                                isMonthExpanded ? Theme.accent.opacity(0.34) : Theme.textSecondary.opacity(0.14),
+                                isMonthExpanded ? Theme.accent.opacity(0.28) : Theme.textSecondary.opacity(0.14),
                                 lineWidth: 1
                             )
                     }
                 }
                 .buttonStyle(TodayPressableButtonStyle())
+
+                if isMonthExpanded {
+                    Button {
+                        TodayHaptics.light()
+                        onChooseMonthYear()
+                    } label: {
+                        Text("Choose month")
+                            .font(Theme.Typography.caption.weight(.semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .buttonStyle(TodayPressableButtonStyle())
+                }
+
+                Spacer(minLength: 0)
+
+                if showsCurrentMonthShortcut, isMonthExpanded {
+                    textAction(title: "Current month", action: onCurrentMonthTap)
+                }
+
+                if showsBackToToday {
+                    textAction(title: "Back to today", action: onBackToTodayTap)
+                }
             }
 
             if isMonthExpanded {
-                HStack(spacing: 10) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Button {
                         TodayHaptics.light()
                         onPreviousMonth()
@@ -435,10 +432,10 @@ struct TodayCalendarStripCard<MonthContent: View>: View {
                             .foregroundStyle(
                                 canNavigateToPreviousMonth
                                     ? Theme.textSecondary
-                                    : Theme.textSecondary.opacity(0.42)
+                                    : Theme.textSecondary.opacity(0.45)
                             )
-                            .frame(width: 32, height: 32)
-                            .background(Theme.surface.opacity(0.86), in: Circle())
+                            .frame(width: 30, height: 30)
+                            .background(Theme.surface.opacity(0.78), in: Circle())
                     }
                     .buttonStyle(TodayPressableButtonStyle())
                     .disabled(!canNavigateToPreviousMonth)
@@ -466,50 +463,26 @@ struct TodayCalendarStripCard<MonthContent: View>: View {
                             .foregroundStyle(
                                 canNavigateToNextMonth
                                     ? Theme.textSecondary
-                                    : Theme.textSecondary.opacity(0.42)
+                                    : Theme.textSecondary.opacity(0.45)
                             )
-                            .frame(width: 32, height: 32)
-                            .background(Theme.surface.opacity(0.86), in: Circle())
+                            .frame(width: 30, height: 30)
+                            .background(Theme.surface.opacity(0.78), in: Circle())
                     }
                     .buttonStyle(TodayPressableButtonStyle())
                     .disabled(!canNavigateToNextMonth)
                 }
 
-                if showsCurrentMonthShortcut {
-                    HStack {
-                        Spacer(minLength: 0)
-
-                        Button {
-                            TodayHaptics.light()
-                            onCurrentMonthTap()
-                        } label: {
-                            Text("Current month")
-                                .font(Theme.Typography.labelSmallStrong)
-                                .foregroundStyle(Theme.textSecondary)
-                                .padding(.horizontal, 12)
-                                .frame(height: 30)
-                                .background(Theme.surface.opacity(0.72), in: Capsule(style: .continuous))
-                                .overlay {
-                                    Capsule(style: .continuous)
-                                        .stroke(Theme.textSecondary.opacity(0.14), lineWidth: 1)
-                                }
-                        }
-                        .buttonStyle(TodayPressableButtonStyle())
-                    }
-                    .transition(.opacity)
-                }
-
                 monthContent()
                     .transition(.opacity)
             } else {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.xxs) {
                     ForEach(weekItems) { item in
                         Button {
                             TodayHaptics.soft()
                             animatePulse(for: item.date)
                             onSelectWeekDay(item.date)
                         } label: {
-                            VStack(spacing: 4) {
+                            VStack(spacing: 3) {
                                 Text(item.weekdaySymbol)
                                     .font(Theme.Typography.caption)
                                     .foregroundStyle(item.isSelected ? Theme.accent : Theme.textSecondary)
@@ -519,30 +492,25 @@ struct TodayCalendarStripCard<MonthContent: View>: View {
                                     .foregroundStyle(item.isSelected ? Theme.accent : Theme.text)
 
                                 Circle()
-                                    .fill(item.isComplete ? Theme.accent.opacity(0.70) : .clear)
-                                    .frame(width: 3.5, height: 3.5)
+                                    .fill(item.isComplete ? Theme.accent.opacity(0.62) : .clear)
+                                    .frame(width: 3, height: 3)
                             }
                             .frame(maxWidth: .infinity)
-                            .frame(height: 56)
-                            .opacity(item.isFuture ? 0.65 : 1)
+                            .frame(height: 48)
+                            .opacity(item.isFuture ? 0.68 : 1)
                             .background(
-                                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                    .fill(item.isSelected ? Theme.accent.opacity(0.16) : Theme.surface.opacity(0.64))
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(item.isSelected ? Theme.accent.opacity(0.13) : Theme.surface2.opacity(0.64))
                             )
                             .overlay {
-                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .stroke(
                                         item.isSelected
-                                            ? Theme.accent.opacity(0.62)
-                                            : (item.isToday ? Theme.accent.opacity(0.32) : Theme.textSecondary.opacity(0.12)),
-                                        lineWidth: item.isSelected ? 1.1 : 0.8
+                                            ? Theme.accent.opacity(0.50)
+                                            : (item.isToday ? Theme.accent.opacity(0.25) : Theme.textSecondary.opacity(0.10)),
+                                        lineWidth: 1
                                     )
                             }
-                            .shadow(
-                                color: item.isSelected ? Theme.accent.opacity(0.16) : .clear,
-                                radius: 8,
-                                y: 4
-                            )
                             .scaleEffect(isPulsing(item.date) ? 0.98 : 1)
                         }
                         .buttonStyle(TodayPressableButtonStyle())
@@ -553,35 +521,30 @@ struct TodayCalendarStripCard<MonthContent: View>: View {
                     reduceMotion ? .linear(duration: 0) : .easeOut(duration: 0.12),
                     value: pulsingDay
                 )
-
-                if showsBackToToday {
-                    HStack {
-                        Spacer(minLength: 0)
-
-                        Button {
-                            TodayHaptics.light()
-                            onBackToTodayTap()
-                        } label: {
-                            Text("Back to Today")
-                                .font(Theme.Typography.labelSmallStrong)
-                                .foregroundStyle(Theme.textSecondary)
-                                .padding(.horizontal, 12)
-                                .frame(height: 30)
-                                .background(Theme.surface.opacity(0.72), in: Capsule(style: .continuous))
-                                .overlay {
-                                    Capsule(style: .continuous)
-                                        .stroke(Theme.textSecondary.opacity(0.14), lineWidth: 1)
-                                }
-                        }
-                        .buttonStyle(TodayPressableButtonStyle())
-                    }
-                    .transition(.opacity)
-                }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .premiumGlassCard(cornerRadius: 22, shadowStrength: 0.55)
+        .padding(.horizontal, Theme.Spacing.sm)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Theme.surface.opacity(0.76))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Theme.textSecondary.opacity(0.10), lineWidth: 1)
+        }
+    }
+
+    private func textAction(title: String, action: @escaping () -> Void) -> some View {
+        Button {
+            TodayHaptics.light()
+            action()
+        } label: {
+            Text(title)
+                .font(Theme.Typography.caption.weight(.semibold))
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .buttonStyle(TodayPressableButtonStyle())
     }
 
     private func animatePulse(for day: Date) {

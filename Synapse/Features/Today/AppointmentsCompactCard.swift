@@ -32,8 +32,8 @@ struct AppointmentsCompactCard: View {
                 textAction(title: "View all", action: onViewAll)
             }
 
-            if let soonAppointment, !isHeroShowingAppointment {
-                soonSpotlight(soonAppointment)
+            if let soonAppointment {
+                appointmentRow(soonAppointment)
             } else {
                 compactState
             }
@@ -41,56 +41,51 @@ struct AppointmentsCompactCard: View {
         .padding(.horizontal, 2)
     }
 
-    private func soonSpotlight(_ appointment: SoonAppointment) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-            Text(appointment.title)
-                .font(Theme.Typography.bodySmallStrong)
-                .foregroundStyle(Theme.text)
-                .lineLimit(2)
-
-            Text(appointment.timeLabel)
-                .font(Theme.Typography.caption)
-                .monospacedDigit()
-                .foregroundStyle(Theme.textSecondary)
-
-            if let location = appointment.location {
-                Text(location)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
-            }
-
+    private func appointmentRow(_ appointment: SoonAppointment) -> some View {
+        Button {
+            TodayHaptics.light()
+            onOpenSoon(appointment.id)
+        } label: {
             HStack(spacing: Theme.Spacing.sm) {
-                Button {
-                    TodayHaptics.light()
-                    onOpenSoon(appointment.id)
-                } label: {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
+                    Text(appointment.title)
+                        .font(Theme.Typography.bodySmallStrong)
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+
                     HStack(spacing: Theme.Spacing.xxxs) {
-                        Text("Open")
-                        Image(systemName: "chevron.right")
-                            .font(Theme.Typography.caption.weight(.semibold))
+                        Text(appointment.timeLabel)
+                            .font(Theme.Typography.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.textSecondary)
+
+                        if let location = appointment.location, !location.isEmpty {
+                            Text("•")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.textSecondary.opacity(0.8))
+                            Text(location)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(1)
+                        }
                     }
-                    .font(Theme.Typography.caption.weight(.semibold))
-                    .foregroundStyle(Theme.accent)
                 }
-                .buttonStyle(TodayPressableButtonStyle())
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(Theme.textSecondary)
             }
         }
-        .padding(Theme.Spacing.sm)
+        .buttonStyle(TodayPressableButtonStyle())
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Theme.surface2.opacity(0.8))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Theme.text.opacity(0.08), lineWidth: 1)
-        }
+        .padding(.vertical, Theme.Spacing.xxxs)
     }
 
     private var compactState: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xxxs) {
-            Text(isHeroShowingAppointment ? "Next appointment is already highlighted above." : "No appointments soon")
+            Text("No appointments soon")
                 .font(Theme.Typography.bodySmall)
                 .foregroundStyle(Theme.textSecondary)
         }
